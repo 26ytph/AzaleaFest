@@ -1,4 +1,11 @@
-"""M4 匹配介面 — M3 import 的唯一入口 (spec M4.2)."""
+"""M4 匹配介面 — M3 import 的唯一入口 (spec M4.2).
+
+Matching policy: the static legal_hotels list is authoritative — if a fuzzy
+match clears SCORE_THRESHOLD, the hotel is legal; otherwise it is illegal,
+and we surface the 3 nearest legal hotels as alternatives. We do not return
+'unknown' in normal operation; that status is reserved for the defensive
+case where the legal_hotels table is empty (operator hasn't run ingest yet).
+"""
 from dataclasses import dataclass, field
 
 from rapidfuzz import fuzz, process
@@ -17,26 +24,25 @@ class MatchResult:
 
 SCORE_THRESHOLD = 75
 
-# ~1km candidate window (0.01° ≈ 1.1km)
+# ~1km candidate window (0.01° ≈ 1.1km) — keeps the fuzzy comparison cheap
+# without changing the legal/illegal verdict, since a hotel that doesn't
+# appear within 1km of its own claimed coords almost certainly isn't a match.
 COORD_WINDOW = 0.01
-
-# Rough Taipei City bounding box — used to decide whether a sub-threshold
-# match should be flagged 'illegal' (in Taipei) vs 'unknown' (out of scope).
-TAIPEI_LAT_MIN, TAIPEI_LAT_MAX = 24.95, 25.21
-TAIPEI_LNG_MIN, TAIPEI_LNG_MAX = 121.45, 121.67
 
 
 async def match_hotel(name: str, lat: float, lng: float) -> MatchResult:
     """Hotel legality check (spec M4.2).
 
-    1. Pull candidates from legal_hotels:
-         - within ~1km box around (lat, lng)
-         - fallback: SELECT ALL when no nearby rows exist
-    2. rapidfuzz.process.extractOne with token_sort_ratio, score_cutoff=75.
-    3. Map result:
-         score >= 75              → legal
-         score < 75, in Taipei    → illegal + 3 nearest legal hotels
-         else                     → unknown
+    Steps:
+      1. Pull candidates from legal_hotels within ~1km of (lat, lng).
+         Fallback: SELECT ALL when no nearby rows exist (so we still match
+         on hotels with missing coords).
+      2. Score against candidate names with rapidfuzz token_sort_ratio,
+         cutoff=75.
+      3. Verdict:
+           score >= 75 → 'legal' + matched record
+           score <  75 → 'illegal' + up to 3 nearest legal hotels
+           empty DB    → 'unknown' (defensive only)
     """
     async with SessionLocal() as session:
         result = await session.execute(
@@ -74,25 +80,20 @@ async def match_hotel(name: str, lat: float, lng: float) -> MatchResult:
                 status="legal", match=matched, score=float(score)
             )
 
-        in_taipei = (
-            TAIPEI_LAT_MIN <= lat <= TAIPEI_LAT_MAX
-            and TAIPEI_LNG_MIN <= lng <= TAIPEI_LNG_MAX
+        # Not on the static list → illegal. Show 3 nearest legal hotels so
+        # the user has something concrete to redirect to.
+        result = await session.execute(
+            text(
+                "SELECT id, name, address, lat, lng "
+                "FROM legal_hotels "
+                "WHERE lat IS NOT NULL AND lng IS NOT NULL "
+                "ORDER BY (lat - :lat) * (lat - :lat) "
+                "       + (lng - :lng) * (lng - :lng) ASC "
+                "LIMIT 3"
+            ),
+            {"lat": lat, "lng": lng},
         )
-        if in_taipei:
-            result = await session.execute(
-                text(
-                    "SELECT id, name, address, lat, lng "
-                    "FROM legal_hotels "
-                    "WHERE lat IS NOT NULL AND lng IS NOT NULL "
-                    "ORDER BY (lat - :lat) * (lat - :lat) "
-                    "       + (lng - :lng) * (lng - :lng) ASC "
-                    "LIMIT 3"
-                ),
-                {"lat": lat, "lng": lng},
-            )
-            alternatives = [dict(r) for r in result.mappings().all()]
-            return MatchResult(
-                status="illegal", match=None, alternatives=alternatives
-            )
-
-        return MatchResult(status="unknown", match=None)
+        alternatives = [dict(r) for r in result.mappings().all()]
+        return MatchResult(
+            status="illegal", match=None, alternatives=alternatives
+        )
