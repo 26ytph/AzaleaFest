@@ -29,6 +29,9 @@ export default function HomePage() {
 
   useEffect(() => {
     setSessionId(getSessionId())
+    if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') {
+      tripsStore.seedSampleIfEmpty()
+    }
   }, [])
 
   const { places, mutate: mutatePlaces } = usePlaces(sessionId)
