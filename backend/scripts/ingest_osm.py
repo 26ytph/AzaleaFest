@@ -66,6 +66,45 @@ TRAVEL_TAIWAN_URL = "https://media.taiwan.net.tw/XMLReleaseALL_public/scenic_spo
 _TRAVEL_TAIWAN_ID_OFFSET = 3 * 10**14
 _TARGET_REGION = "臺北市"
 
+# 第三個來源：Wikidata SPARQL，補進 OSM/觀光署都沒覆蓋到的「歷史建築/廟宇/紀念館」等。
+# Anchor: P131* Q1867（行政上隸屬於台北市），加 type 白名單關鍵字過濾。
+WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
+_WIKIDATA_ID_OFFSET = 4 * 10**14
+_WIKIDATA_QUERY = """
+SELECT ?item ?itemLabel ?itemDescription ?lat ?lng ?typeLabel WHERE {
+  ?item wdt:P131* wd:Q1867 .
+  ?item wdt:P625 ?coord .
+  ?item p:P625 ?cs .
+  ?cs psv:P625 ?cn .
+  ?cn wikibase:geoLatitude ?lat ;
+      wikibase:geoLongitude ?lng .
+  ?item wdt:P31 ?type .
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "zh-tw,zh,en". }
+}
+LIMIT 5000
+"""
+
+# Wikidata type label 白名單（中文關鍵字 substring 比對）
+# 命中 → category=attraction（除非命中 _WIKIDATA_FOOD_KEYWORDS）
+_WIKIDATA_ATTRACTION_KEYWORDS = (
+    "公園", "花園", "博物館", "美術館", "藝術中心", "藝術館",
+    "古蹟", "文化資產", "歷史建築", "歷史遺", "二二八遺址", "考古",
+    "廟", "寺", "宮", "教堂", "神社",
+    "宅第", "古厝", "故居", "紀念館", "紀念碑",
+    "摩天大樓", "地標", "塔",
+    "文創", "劇場", "劇院", "電影院", "音樂廳",
+    "市場", "商場", "百貨", "夜市",
+    "山", "峰", "嶺", "丘", "岩", "步道", "瀑布", "溫泉", "觀景",
+    "植物園", "動物園", "公墓",
+    "圖書館",
+)
+_WIKIDATA_FOOD_KEYWORDS = ("餐廳", "咖啡", "茶館", "酒吧", "麵包店", "食堂", "小吃")
+# 一律黑名單：太細碎或非景點類型
+_WIKIDATA_BLACKLIST_KEYWORDS = (
+    "村里", "學校", "醫院", "軍事", "捷運站", "車站", "飯店", "旅館",
+    "公司", "公務", "監獄", "辦公"
+)
+
 TAG_TO_CATEGORY: dict[str, str] = {
     "restaurant": "food", "cafe": "food", "bar": "food",
     "fast_food": "food", "food_court": "food", "ice_cream": "food",
@@ -212,6 +251,72 @@ def parse_travel_taiwan_item(item: dict) -> dict | None:
         }
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def parse_wikidata_item(b: dict) -> dict | None:
+    """Wikidata SPARQL binding → row dict。回傳 None 表示跳過。"""
+    try:
+        type_label = (b.get("typeLabel") or {}).get("value") or ""
+        # 黑名單先擋
+        if any(kw in type_label for kw in _WIKIDATA_BLACKLIST_KEYWORDS):
+            return None
+        # 白名單分類
+        if any(kw in type_label for kw in _WIKIDATA_FOOD_KEYWORDS):
+            category = "food"
+        elif any(kw in type_label for kw in _WIKIDATA_ATTRACTION_KEYWORDS):
+            category = "attraction"
+        else:
+            return None  # 未在白名單
+
+        name = (b.get("itemLabel") or {}).get("value") or ""
+        # itemLabel 若無中文 fallback，會是 Q-id（例如 "Q1234567"）— 跳過
+        if not name or name.startswith("Q") and name[1:].isdigit():
+            return None
+
+        try:
+            lat = float(b["lat"]["value"])
+            lng = float(b["lng"]["value"])
+        except (KeyError, TypeError, ValueError):
+            return None
+
+        desc = (b.get("itemDescription") or {}).get("value") or None
+        wd_uri = (b.get("item") or {}).get("value") or ""
+        wd_id = wd_uri.rsplit("/", 1)[-1]  # e.g. "Q12345"
+
+        return {
+            "osm_id": _stable_id(wd_id, _WIKIDATA_ID_OFFSET),
+            "name": name,
+            "name_en": None,
+            "category": category,
+            "lat": lat,
+            "lng": lng,
+            "address": None,
+            "description": desc,
+            "tags": [type_label] if type_label else None,
+            "source": "wikidata",
+        }
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+async def fetch_wikidata_data() -> list[dict]:
+    """從 Wikidata SPARQL 抓在台北的有座標實體。失敗拋 RuntimeError。"""
+    last_err: Exception | None = None
+    headers = {**HTTP_HEADERS, "Accept": "application/sparql-results+json"}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0), headers=headers) as client:
+        for attempt in (1, 2):
+            try:
+                resp = await client.get(
+                    WIKIDATA_SPARQL_URL, params={"query": _WIKIDATA_QUERY, "format": "json"}
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data["results"]["bindings"]
+            except (httpx.HTTPError, ValueError, KeyError) as e:
+                last_err = e
+                if attempt == 1:
+                    await asyncio.sleep(15)
+    raise RuntimeError(f"Wikidata SPARQL fetch failed: {last_err}") from last_err
 
 
 async def fetch_travel_taiwan_data() -> list[dict]:
@@ -412,7 +517,35 @@ async def ingest() -> None:
     except Exception as e:
         print(
             f"Phase 1b | TWBureau fetch FAILED ({type(e).__name__}); "
-            f"continuing with OSM only",
+            f"continuing without it",
+            flush=True,
+        )
+        tw_count = 0
+
+    # ---- Phase 1c: Wikidata SPARQL ----
+    try:
+        wd_items = await fetch_wikidata_data()
+        print(
+            f"Phase 1c | Wikidata: fetched {len(wd_items)} bindings",
+            flush=True,
+        )
+        before = len(parsed)
+        for it in wd_items:
+            row = parse_wikidata_item(it)
+            if row is None or row["osm_id"] in seen_ids:
+                continue
+            seen_ids.add(row["osm_id"])
+            parsed.append(row)
+        wd_count = len(parsed) - before
+        print(
+            f"Phase 1c | Wikidata: {wd_count} valid Taipei rows added "
+            f"(after type whitelist + dedupe)",
+            flush=True,
+        )
+    except Exception as e:
+        print(
+            f"Phase 1c | Wikidata fetch FAILED ({type(e).__name__}); "
+            f"continuing without it",
             flush=True,
         )
 
