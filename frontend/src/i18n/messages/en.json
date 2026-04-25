@@ -1,0 +1,240 @@
+{
+  "brand": "Taipei WanderGuard",
+  "common": {
+    "loading": "Loading…",
+    "loadingMap": "Loading map…",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "save": "Save",
+    "remove": "Remove"
+  },
+  "language": {
+    "label": "Language",
+    "switch": "Switch language"
+  },
+  "category": {
+    "all": "All",
+    "food": "Food",
+    "foodWithIcon": "🍽️ Food",
+    "attraction": "Attractions",
+    "attractionWithIcon": "🏛️ Attractions",
+    "hotel": "Hotels",
+    "hotelWithIcon": "🏨 Hotels"
+  },
+  "home": {
+    "confirmRemovePlace": "Remove this place from your favorites?",
+    "confirmDeleteTrip": "Delete this trip?",
+    "missingMapboxToken": "NEXT_PUBLIC_MAPBOX_TOKEN is missing — the basemap won't load."
+  },
+  "newTrip": {
+    "header": "New Trip",
+    "backToMap": "← Back to map",
+    "loading": "AI is planning your trip, ~10–20 seconds…",
+    "successMessage": "Generated a {count}-stop, ~{hours}-hour itinerary based on your preferences. Tell me how to tweak it in the chat on the right.",
+    "genericFailure": "Failed to generate itinerary"
+  },
+  "tripDetail": {
+    "backToMap": "← Back to map",
+    "confirmDelete": "Delete this trip?",
+    "notFound": "Trip not found — it may have been deleted.",
+    "backHome": "Back to map",
+    "noItinerary": "No itinerary yet.",
+    "partialMapWarning": "Map shows only {visible}/{total} stops — others have no coordinates yet (backend hasn't returned lat/lng for them).",
+    "summary": {
+      "date": "Date",
+      "time": "Time",
+      "budget": "Budget",
+      "districts": "Districts",
+      "anyDistrict": "Anywhere",
+      "budgetValue": "NT$ {amount} / day",
+      "mustVisit": "Must visit: {names}",
+      "mustVisitMore": "+{count} more"
+    },
+    "tags": {
+      "lucky": "🎲 Feeling lucky",
+      "paceCompact": "Packed pace",
+      "paceNormal": "Normal pace",
+      "paceLeisurely": "Leisurely pace",
+      "vegetarian": "Vegetarian",
+      "halal": "Halal",
+      "lowWalking": "Less walking",
+      "dietOther": "Diet: {note}",
+      "dietExtra": "Diet note: {note}",
+      "transportPublic": "🚇 Public transit",
+      "transportWalk": "🚶 Walking",
+      "transportBike": "🚲 Cycling",
+      "customTheme": "✏️ {label}"
+    },
+    "chat": {
+      "updatedSummary": "Itinerary updated: {count} stops, ~{hours} hours.",
+      "regenerateFailed": "Regeneration failed: {message}",
+      "unknownError": "Unknown error"
+    }
+  },
+  "sidebar": {
+    "placesCount": "{count} saved",
+    "tabs": {
+      "places": "Saved",
+      "recommend": "For You",
+      "trips": "Trips"
+    },
+    "places": {
+      "emptyTitle": "No saved places yet",
+      "emptyBody1": "Send IG Reels / Threads links to the Line account,",
+      "emptyBody2": "or just send a place name — it'll show up here automatically."
+    },
+    "recommend": {
+      "needPlaces": "Save at least 1 place so the AI can recommend ones you might like.",
+      "filterEmpty": "No recommendations in this category yet."
+    },
+    "trips": {
+      "create": "＋ New trip",
+      "emptyTitle": "No trips yet",
+      "emptyBody": "Tap above to generate your first trip from dates, budget, and preferences.",
+      "stopsAndHours": "{count} stops · ~{hours} hours",
+      "noItinerary": "No itinerary generated yet"
+    },
+    "generateButton": "✨ Generate trip"
+  },
+  "placeCard": {
+    "addToTrip": "Add to trip",
+    "remove": "Remove",
+    "source": {
+      "reels_url": "Reels",
+      "image": "Image",
+      "text": "Text",
+      "manual": "Manual"
+    }
+  },
+  "recommendCard": {
+    "similarity": "Match {score}",
+    "addToFavorites": "＋ Save"
+  },
+  "hotelBadge": {
+    "legal": {
+      "label": "🛡️ Licensed",
+      "tip": "Matched against the registered legal hotel list"
+    },
+    "illegal": {
+      "label": "⚠️ Likely unlicensed",
+      "tip": "May have fire-safety risks; consider a licensed hotel"
+    },
+    "unknown": {
+      "label": "❓ Pending",
+      "tip": "Verification pending"
+    }
+  },
+  "itinerary": {
+    "header": "Itinerary",
+    "stats": "~{hours} hours · {count} stops",
+    "stayMinutes": "Stay {minutes} min"
+  },
+  "aiChat": {
+    "header": "Chat with AI",
+    "subheader": "Tell the AI in natural language how to tweak this itinerary",
+    "empty": "No messages yet. Try a quick prompt below or type your own.",
+    "busy": "AI is rewriting the itinerary…",
+    "placeholder": "e.g. Move the cafe near Fujin Street",
+    "send": "Send",
+    "quickPrompts": {
+      "vegetarian": "Make lunch vegetarian-friendly",
+      "compact": "Itinerary is too tiring, trim to 4 stops",
+      "history": "Add historic spots in Dadaocheng",
+      "budget": "Change budget to NT$ 800"
+    }
+  },
+  "tripWizard": {
+    "title": "Create a new trip",
+    "submit": "Generate",
+    "submitWithIcon": "✨ Generate",
+    "steps": {
+      "basic": "Basics",
+      "preferences": "Preferences",
+      "mustVisit": "Must-visits"
+    },
+    "tripName": "Trip name",
+    "tripNamePlaceholder": "e.g. Weekend in Dadaocheng",
+    "dateStart": "Start date",
+    "dateEnd": "End date",
+    "singleDay": "Single-day trip",
+    "multiDay": "{days}-day trip",
+    "dayStart": "Day starts",
+    "dayEnd": "Day ends",
+    "diet": "Dietary preference",
+    "dietOptions": {
+      "none": "No restriction",
+      "vegetarian": "Vegetarian",
+      "halal": "Halal",
+      "other": "Other"
+    },
+    "dietOtherPlaceholder": "Describe other dietary needs, e.g. low-GI, gluten-free, no beef...",
+    "dietExtraPlaceholder": "Extra notes (allergies, no spice, no scallion/garlic...)",
+    "mobility": "Mobility",
+    "mobilityOptions": {
+      "normalLabel": "Normal",
+      "normalHint": "Can walk normally",
+      "lowLabel": "Less walking",
+      "lowHint": "Prefer transit, avoid long walks"
+    },
+    "budget": "Budget (per person per day NT$ {amount})",
+    "lucky": {
+      "label": "🎲 Feeling lucky",
+      "reroll": "Reroll",
+      "explain": "Let the AI randomize pace, transport, district and theme — you just go.",
+      "applied": "Randomized into the preferences below; tweak as you like."
+    },
+    "pace": "Pace",
+    "paceOptions": {
+      "compactLabel": "Packed",
+      "compactHint": "6+ stops/day, see it all",
+      "normalLabel": "Normal",
+      "normalHint": "4–5 stops/day",
+      "leisurelyLabel": "Leisurely",
+      "leisurelyHint": "2–3 stops/day, deep experience"
+    },
+    "transport": "Transport (multi-select)",
+    "transportOptions": {
+      "public": "Public transit",
+      "walk": "Walking",
+      "bike": "Cycling"
+    },
+    "transportRequired": "Pick at least one transport mode",
+    "districts": "Districts (multi-select; empty = all of Taipei)",
+    "districtNames": {
+      "中正區": "Zhongzheng",
+      "大同區": "Datong",
+      "中山區": "Zhongshan",
+      "松山區": "Songshan",
+      "大安區": "Da'an",
+      "萬華區": "Wanhua",
+      "信義區": "Xinyi",
+      "士林區": "Shilin",
+      "北投區": "Beitou",
+      "內湖區": "Neihu",
+      "南港區": "Nangang",
+      "文山區": "Wenshan"
+    },
+    "themes": "Themes (multi-select)",
+    "themeOptions": {
+      "food": "🍜 Food",
+      "nature": "🏞️ Nature",
+      "arts": "🎨 Arts",
+      "shopping": "🛍️ Shopping",
+      "history": "🏯 History",
+      "custom": "✏️ Custom"
+    },
+    "customThemePlaceholder": "Custom theme, e.g. photography, pet-friendly...",
+    "expectation": "Anything you want to tell the AI",
+    "expectationPlaceholder": "e.g. lunch in Da'an, then a cafe to write at in the afternoon...",
+    "mustVisitHint": "AI auto-picks from your saved & recommended places — only check the ones that absolutely must be in. Leaving them all unchecked is fine.",
+    "mustVisitEmpty": "No saved places yet. Go to the home page and add some via Line first.",
+    "luckyMixNote": "Lucky or not, the AI will mix in some recommended places to enrich the trip."
+  },
+  "tripMap": {
+    "noStops": "This trip has no locatable stops",
+    "stayMinutes": "Stay {minutes} min"
+  }
+}

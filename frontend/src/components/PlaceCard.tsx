@@ -1,6 +1,7 @@
 'use client'
 
 import clsx from 'clsx'
+import { useTranslations } from 'next-intl'
 import type { Place } from '@/lib/types'
 import HotelBadge from './HotelBadge'
 
@@ -22,13 +23,6 @@ const CATEGORY_TINT: Record<Place['category'], string> = {
   hotel: 'bg-violet-50/40',
 }
 
-const SOURCE_LABEL: Record<Place['source_type'], string> = {
-  reels_url: 'Reels',
-  image: '圖片',
-  text: '文字',
-  manual: '手動',
-}
-
 export interface PlaceCardProps {
   place: Place
   isSelected?: boolean
@@ -44,6 +38,7 @@ export default function PlaceCard({
   onDelete,
   onAddToTrip,
 }: PlaceCardProps) {
+  const t = useTranslations()
   return (
     <article
       onClick={onClick}
@@ -67,7 +62,7 @@ export default function PlaceCard({
           )}
         </div>
         <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-          {SOURCE_LABEL[place.source_type]}
+          {t(`placeCard.source.${place.source_type}` as any)}
         </span>
       </header>
 
@@ -92,7 +87,7 @@ export default function PlaceCard({
               }}
               className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:border-blue-400 hover:text-blue-600"
             >
-              加入行程
+              {t('placeCard.addToTrip')}
             </button>
           )}
           {onDelete && (
@@ -104,7 +99,7 @@ export default function PlaceCard({
               }}
               className="rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50"
             >
-              移除
+              {t('placeCard.remove')}
             </button>
           )}
         </footer>

@@ -20,6 +20,9 @@ line-bot-sdk==3.14.5
 # M4
 rapidfuzz==3.9.7
 
+# i18n: 繁→簡中文機械轉換（scripts/translate_attractions.py 用）
+opencc-python-reimplemented==0.1.7
+
 # M1, M2, M3, M5, M7 (Gemini: vision + reason + itinerary)
 google-genai==0.8.0
 

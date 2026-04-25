@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import Sidebar, { type CategoryFilter } from '@/components/Sidebar'
 import { usePlaces } from '@/hooks/usePlaces'
 import { useRecommendations } from '@/hooks/useRecommendations'
@@ -16,13 +17,14 @@ const MapView = dynamic(() => import('@/components/Map'), {
   ssr: false,
   loading: () => (
     <div className="flex h-full w-full items-center justify-center text-slate-400">
-      載入地圖…
+      …
     </div>
   ),
 })
 
 export default function HomePage() {
   const router = useRouter()
+  const t = useTranslations()
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [category, setCategory] = useState<CategoryFilter>('all')
@@ -49,7 +51,7 @@ export default function HomePage() {
 
   const handleDeletePlace = async (id: number) => {
     if (!sessionId) return
-    if (!confirm('確定要從收藏中移除這個地點嗎？')) return
+    if (!confirm(t('home.confirmRemovePlace'))) return
     await api.deletePlace(id, sessionId)
     mutatePlaces()
     if (selectedId === id) setSelectedId(null)
@@ -84,7 +86,7 @@ export default function HomePage() {
   }
 
   const handleDeleteTrip = (tripId: string) => {
-    if (!confirm('確定要刪除這個行程嗎？')) return
+    if (!confirm(t('home.confirmDeleteTrip'))) return
     tripsStore.remove(tripId)
   }
 

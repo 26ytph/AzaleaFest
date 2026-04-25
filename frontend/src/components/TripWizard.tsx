@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import clsx from 'clsx'
+import { useTranslations } from 'next-intl'
 import type { Place } from '@/lib/types'
 import {
   type Diet,
@@ -16,37 +17,15 @@ import {
   tripDayCount,
 } from '@/lib/trip-types'
 
-const DIETS: { id: Diet; label: string }[] = [
-  { id: 'none', label: '無限制' },
-  { id: 'vegetarian', label: '素食' },
-  { id: 'halal', label: '清真' },
-  { id: 'other', label: '其他' },
+const DIET_IDS: Diet[] = ['none', 'vegetarian', 'halal', 'other']
+const MOBILITY_IDS: Mobility[] = ['normal', 'low_walking']
+const TRANSPORT_IDS: { id: Transport; emoji: string }[] = [
+  { id: 'public', emoji: '🚇' },
+  { id: 'walk', emoji: '🚶' },
+  { id: 'bike', emoji: '🚲' },
 ]
-
-const MOBILITY: { id: Mobility; label: string; hint: string }[] = [
-  { id: 'normal', label: '一般', hint: '可正常步行' },
-  { id: 'low_walking', label: '少走路', hint: '行程偏交通工具，避免長距離步行' },
-]
-
-const TRANSPORT: { id: Transport; label: string; emoji: string }[] = [
-  { id: 'public', label: '大眾運輸', emoji: '🚇' },
-  { id: 'walk', label: '步行', emoji: '🚶' },
-  { id: 'bike', label: '自行車', emoji: '🚲' },
-]
-
-const PACES: { id: Pace; label: string; hint: string }[] = [
-  { id: 'compact', label: '緊湊', hint: '每天 6+ 站，看好看滿' },
-  { id: 'normal', label: '一般', hint: '每天 4–5 站' },
-  { id: 'leisurely', label: '愜意', hint: '每天 2–3 站，深度體驗' },
-]
-
-const THEMES: { id: Theme; label: string }[] = [
-  { id: 'food', label: '🍜 美食' },
-  { id: 'nature', label: '🏞️ 山水' },
-  { id: 'arts', label: '🎨 文藝' },
-  { id: 'shopping', label: '🛍️ 購物' },
-  { id: 'history', label: '🏯 歷史' },
-]
+const PACE_IDS: Pace[] = ['compact', 'normal', 'leisurely']
+const THEME_IDS: Theme[] = ['food', 'nature', 'arts', 'shopping', 'history']
 
 function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
@@ -61,10 +40,10 @@ function pickN<T>(arr: readonly T[], min: number, max: number): T[] {
 function randomizeForLucky(p: TripPreferences): TripPreferences {
   return {
     ...p,
-    pace: pick(['compact', 'normal', 'leisurely'] as const),
+    pace: pick(PACE_IDS),
     transport: pickN(['public', 'walk', 'bike'] as const, 1, 2) as Transport[],
     districts: pickN(TAIPEI_DISTRICTS, 1, 3) as District[],
-    themes: pickN(['food', 'nature', 'arts', 'shopping', 'history'] as const, 1, 3) as Theme[],
+    themes: pickN(THEME_IDS, 1, 3),
   }
 }
 
@@ -72,7 +51,7 @@ export interface TripWizardProps {
   places: Place[]
   initial?: Partial<TripPreferences>
   initialTitle?: string
-  submitLabel?: string
+  submitLabelKey?: 'submit' | 'submitWithIcon'
   onSubmit: (title: string, prefs: TripPreferences) => void
   onCancel?: () => void
 }
@@ -81,10 +60,11 @@ export default function TripWizard({
   places,
   initial,
   initialTitle = '',
-  submitLabel = '生成行程',
+  submitLabelKey = 'submitWithIcon',
   onSubmit,
   onCancel,
 }: TripWizardProps) {
+  const t = useTranslations()
   const [step, setStep] = useState(0)
   const [title, setTitle] = useState(initialTitle)
   const [prefs, setPrefs] = useState<TripPreferences>({
@@ -108,16 +88,20 @@ export default function TripWizard({
 
   const reroll = () => setPrefs((p) => randomizeForLucky({ ...p, luckyPick: true }))
 
-  const steps = ['基本資訊', '旅遊偏好', '必去景點']
+  const stepKeys: ('basic' | 'preferences' | 'mustVisit')[] = [
+    'basic',
+    'preferences',
+    'mustVisit',
+  ]
   const canSubmit = title.trim().length > 0 && prefs.dateStart <= prefs.dateEnd
   const days = tripDayCount(prefs)
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
       <header className="border-b border-slate-200 px-5 py-4">
-        <h1 className="text-lg font-semibold text-slate-900">建立新行程</h1>
+        <h1 className="text-lg font-semibold text-slate-900">{t('tripWizard.title')}</h1>
         <ol className="mt-3 flex items-center gap-2 text-xs">
-          {steps.map((s, i) => (
+          {stepKeys.map((s, i) => (
             <li key={s} className="flex items-center gap-2">
               <span
                 className={clsx(
@@ -136,9 +120,9 @@ export default function TripWizard({
                   i === step ? 'text-slate-900 font-medium' : 'text-slate-500',
                 )}
               >
-                {s}
+                {t(`tripWizard.steps.${s}` as any)}
               </span>
-              {i < steps.length - 1 && <span className="text-slate-300">→</span>}
+              {i < stepKeys.length - 1 && <span className="text-slate-300">→</span>}
             </li>
           ))}
         </ol>
@@ -147,18 +131,18 @@ export default function TripWizard({
       <div className="space-y-6 px-5 py-5">
         {step === 0 && (
           <div className="space-y-4">
-            <Field label="行程名稱" required>
+            <Field label={t('tripWizard.tripName')} required>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="例如：週末大稻埕散步"
+                placeholder={t('tripWizard.tripNamePlaceholder')}
                 className="input"
               />
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="開始日期">
+              <Field label={t('tripWizard.dateStart')}>
                 <input
                   type="date"
                   value={prefs.dateStart}
@@ -170,7 +154,7 @@ export default function TripWizard({
                   className="input"
                 />
               </Field>
-              <Field label="結束日期">
+              <Field label={t('tripWizard.dateEnd')}>
                 <input
                   type="date"
                   value={prefs.dateEnd}
@@ -181,11 +165,13 @@ export default function TripWizard({
               </Field>
             </div>
             <p className="-mt-1 text-[11px] text-slate-500">
-              {days === 1 ? '單日行程' : `${days} 天行程`}
+              {days === 1
+                ? t('tripWizard.singleDay')
+                : t('tripWizard.multiDay', { days })}
             </p>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="每日開始">
+              <Field label={t('tripWizard.dayStart')}>
                 <input
                   type="time"
                   value={prefs.startTime}
@@ -193,7 +179,7 @@ export default function TripWizard({
                   className="input"
                 />
               </Field>
-              <Field label="每日結束">
+              <Field label={t('tripWizard.dayEnd')}>
                 <input
                   type="time"
                   value={prefs.endTime}
@@ -203,9 +189,12 @@ export default function TripWizard({
               </Field>
             </div>
 
-            <Field label="飲食偏好">
+            <Field label={t('tripWizard.diet')}>
               <PillGroup
-                items={DIETS.map((d) => ({ id: d.id, label: d.label }))}
+                items={DIET_IDS.map((id) => ({
+                  id,
+                  label: t(`tripWizard.dietOptions.${id}` as any),
+                }))}
                 value={prefs.diet}
                 onChange={(v) => update('diet', v as Diet)}
               />
@@ -215,35 +204,47 @@ export default function TripWizard({
                 onChange={(e) => update('dietNote', e.target.value)}
                 placeholder={
                   prefs.diet === 'other'
-                    ? '請描述其他飲食需求，例如：低 GI、無麩質、不吃牛...'
-                    : '其他補充（過敏、不吃辣、忌蔥蒜...）'
+                    ? t('tripWizard.dietOtherPlaceholder')
+                    : t('tripWizard.dietExtraPlaceholder')
                 }
                 className="input mt-2"
               />
             </Field>
 
-            <Field label="行動需求">
+            <Field label={t('tripWizard.mobility')}>
               <div className="grid grid-cols-2 gap-2">
-                {MOBILITY.map((m) => (
+                {MOBILITY_IDS.map((id) => (
                   <button
-                    key={m.id}
+                    key={id}
                     type="button"
-                    onClick={() => update('mobility', m.id)}
+                    onClick={() => update('mobility', id)}
                     className={clsx(
                       'rounded-lg border px-3 py-2 text-left text-sm transition',
-                      prefs.mobility === m.id
+                      prefs.mobility === id
                         ? 'border-blue-400 bg-blue-50 text-blue-700'
                         : 'border-slate-200 hover:border-slate-300',
                     )}
                   >
-                    <div className="font-medium">{m.label}</div>
-                    <div className="text-[11px] text-slate-500">{m.hint}</div>
+                    <div className="font-medium">
+                      {t(
+                        `tripWizard.mobilityOptions.${
+                          id === 'normal' ? 'normalLabel' : 'lowLabel'
+                        }` as any,
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {t(
+                        `tripWizard.mobilityOptions.${
+                          id === 'normal' ? 'normalHint' : 'lowHint'
+                        }` as any,
+                      )}
+                    </div>
                   </button>
                 ))}
               </div>
             </Field>
 
-            <Field label={`預算（每人每日 NT$ ${prefs.budget.toLocaleString()}）`}>
+            <Field label={t('tripWizard.budget', { amount: prefs.budget.toLocaleString() })}>
               <input
                 type="range"
                 min={500}
@@ -282,7 +283,7 @@ export default function TripWizard({
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-base font-semibold text-slate-900">
-                      🎲 好手氣
+                      {t('tripWizard.lucky.label')}
                     </span>
                     {prefs.luckyPick && (
                       <button
@@ -290,49 +291,53 @@ export default function TripWizard({
                         onClick={reroll}
                         className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] text-amber-700 hover:bg-amber-100"
                       >
-                        重新抽
+                        {t('tripWizard.lucky.reroll')}
                       </button>
                     )}
                   </div>
                   <p className="mt-1 text-xs text-slate-600">
-                    讓 AI 隨機決定節奏、交通、地區、主題 — 你只要負責去玩。
-                    {prefs.luckyPick && '已隨機填入下方偏好，可手動微調。'}
+                    {t('tripWizard.lucky.explain')}
+                    {prefs.luckyPick && ' ' + t('tripWizard.lucky.applied')}
                   </p>
                 </div>
               </label>
             </div>
 
-            <Field label="旅遊節奏">
+            <Field label={t('tripWizard.pace')}>
               <div className="grid grid-cols-3 gap-2">
-                {PACES.map((p) => (
+                {PACE_IDS.map((id) => (
                   <button
-                    key={p.id}
+                    key={id}
                     type="button"
-                    onClick={() => update('pace', p.id)}
+                    onClick={() => update('pace', id)}
                     className={clsx(
                       'rounded-lg border px-3 py-2 text-left text-sm transition',
-                      prefs.pace === p.id
+                      prefs.pace === id
                         ? 'border-blue-400 bg-blue-50 text-blue-700'
                         : 'border-slate-200 hover:border-slate-300',
                     )}
                   >
-                    <div className="font-medium">{p.label}</div>
-                    <div className="text-[11px] text-slate-500">{p.hint}</div>
+                    <div className="font-medium">
+                      {t(`tripWizard.paceOptions.${id}Label` as any)}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {t(`tripWizard.paceOptions.${id}Hint` as any)}
+                    </div>
                   </button>
                 ))}
               </div>
             </Field>
 
-            <Field label="交通方式（可複選）">
+            <Field label={t('tripWizard.transport')}>
               <div className="grid grid-cols-3 gap-2">
-                {TRANSPORT.map((t) => {
-                  const checked = prefs.transport.includes(t.id)
+                {TRANSPORT_IDS.map((tr) => {
+                  const checked = prefs.transport.includes(tr.id)
                   return (
                     <button
-                      key={t.id}
+                      key={tr.id}
                       type="button"
                       onClick={() =>
-                        update('transport', toggleArr<Transport>(prefs.transport, t.id))
+                        update('transport', toggleArr<Transport>(prefs.transport, tr.id))
                       }
                       className={clsx(
                         'rounded-lg border px-3 py-2 text-sm transition',
@@ -341,18 +346,22 @@ export default function TripWizard({
                           : 'border-slate-200 hover:border-slate-300',
                       )}
                     >
-                      <div className="text-lg">{t.emoji}</div>
-                      <div className="text-xs font-medium">{t.label}</div>
+                      <div className="text-lg">{tr.emoji}</div>
+                      <div className="text-xs font-medium">
+                        {t(`tripWizard.transportOptions.${tr.id}` as any)}
+                      </div>
                     </button>
                   )
                 })}
               </div>
               {prefs.transport.length === 0 && (
-                <p className="mt-1 text-[11px] text-rose-500">至少選擇一種交通方式</p>
+                <p className="mt-1 text-[11px] text-rose-500">
+                  {t('tripWizard.transportRequired')}
+                </p>
               )}
             </Field>
 
-            <Field label="行政區（可複選；不選代表全台北）">
+            <Field label={t('tripWizard.districts')}>
               <div className="flex flex-wrap gap-1.5">
                 {TAIPEI_DISTRICTS.map((d) => (
                   <button
@@ -366,27 +375,27 @@ export default function TripWizard({
                         : 'border-slate-200 text-slate-600 hover:border-slate-300',
                     )}
                   >
-                    {d}
+                    {t(`tripWizard.districtNames.${d}` as any)}
                   </button>
                 ))}
               </div>
             </Field>
 
-            <Field label="主題（可複選）">
+            <Field label={t('tripWizard.themes')}>
               <div className="flex flex-wrap gap-1.5">
-                {THEMES.map((t) => (
+                {THEME_IDS.map((th) => (
                   <button
-                    key={t.id}
+                    key={th}
                     type="button"
-                    onClick={() => update('themes', toggleArr<Theme>(prefs.themes, t.id))}
+                    onClick={() => update('themes', toggleArr<Theme>(prefs.themes, th))}
                     className={clsx(
                       'rounded-full border px-2.5 py-1 text-xs transition',
-                      prefs.themes.includes(t.id)
+                      prefs.themes.includes(th)
                         ? 'border-amber-400 bg-amber-50 text-amber-700'
                         : 'border-slate-200 text-slate-600 hover:border-slate-300',
                     )}
                   >
-                    {t.label}
+                    {t(`tripWizard.themeOptions.${th}` as any)}
                   </button>
                 ))}
                 <button
@@ -399,7 +408,7 @@ export default function TripWizard({
                       : 'border-slate-200 text-slate-600 hover:border-slate-300',
                   )}
                 >
-                  ✏️ 自訂
+                  {t('tripWizard.themeOptions.custom')}
                 </button>
               </div>
               {prefs.themes.includes('custom') && (
@@ -407,18 +416,18 @@ export default function TripWizard({
                   type="text"
                   value={prefs.customTheme}
                   onChange={(e) => update('customTheme', e.target.value)}
-                  placeholder="自訂主題：例如 攝影、寵物友善..."
+                  placeholder={t('tripWizard.customThemePlaceholder')}
                   className="input mt-2"
                 />
               )}
             </Field>
 
-            <Field label="想對 AI 說的旅遊期待">
+            <Field label={t('tripWizard.expectation')}>
               <textarea
                 value={prefs.expectation}
                 onChange={(e) => update('expectation', e.target.value)}
                 rows={3}
-                placeholder="例如：希望午餐在大安區，下午找個能久坐的咖啡廳寫稿..."
+                placeholder={t('tripWizard.expectationPlaceholder')}
                 className="input"
               />
             </Field>
@@ -427,13 +436,10 @@ export default function TripWizard({
 
         {step === 2 && (
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">
-              生成行程時，AI 會自動從你的收藏與推薦景點中挑選 — 這裡只需勾選「一定要排進去」的點。
-              不勾也可以，全部交給 AI 決定。
-            </p>
+            <p className="text-xs text-slate-500">{t('tripWizard.mustVisitHint')}</p>
             {places.length === 0 ? (
               <div className="rounded bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
-                還沒有收藏地點。回到主頁透過 Line 新增後再回來。
+                {t('tripWizard.mustVisitEmpty')}
               </div>
             ) : (
               <ul className="max-h-72 space-y-2 overflow-y-auto pr-1">
@@ -483,7 +489,7 @@ export default function TripWizard({
               </ul>
             )}
             <p className="rounded bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-              無論是否啟用好手氣，AI 都會適度混入推薦景點豐富行程。
+              {t('tripWizard.luckyMixNote')}
             </p>
           </div>
         )}
@@ -495,7 +501,7 @@ export default function TripWizard({
           onClick={onCancel}
           className="rounded px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700"
         >
-          取消
+          {t('common.cancel')}
         </button>
         <div className="flex items-center gap-2">
           {step > 0 && (
@@ -504,16 +510,16 @@ export default function TripWizard({
               onClick={() => setStep((s) => s - 1)}
               className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:border-slate-300"
             >
-              上一步
+              {t('common.back')}
             </button>
           )}
-          {step < steps.length - 1 ? (
+          {step < stepKeys.length - 1 ? (
             <button
               type="button"
               onClick={() => setStep((s) => s + 1)}
               className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500"
             >
-              下一步
+              {t('common.next')}
             </button>
           ) : (
             <button
@@ -522,7 +528,7 @@ export default function TripWizard({
               disabled={!canSubmit}
               className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              ✨ {submitLabel}
+              {t(`tripWizard.${submitLabelKey}` as any)}
             </button>
           )}
         </div>

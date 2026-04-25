@@ -1,0 +1,241 @@
+{
+  "brand": "Taipei WanderGuard",
+  "common": {
+    "loading": "불러오는 중…",
+    "loadingMap": "지도 불러오는 중…",
+    "delete": "삭제",
+    "cancel": "취소",
+    "back": "이전",
+    "next": "다음",
+    "submit": "제출",
+    "save": "저장",
+    "remove": "제거"
+  },
+  "language": {
+    "label": "언어",
+    "switch": "언어 변경"
+  },
+  "category": {
+    "all": "전체",
+    "food": "맛집",
+    "foodWithIcon": "🍽️ 맛집",
+    "attraction": "명소",
+    "attractionWithIcon": "🏛️ 명소",
+    "hotel": "숙박",
+    "hotelWithIcon": "🏨 숙박"
+  },
+  "home": {
+    "confirmRemovePlace": "이 장소를 즐겨찾기에서 제거할까요?",
+    "confirmDeleteTrip": "이 일정을 삭제할까요?",
+    "missingMapboxToken": "NEXT_PUBLIC_MAPBOX_TOKEN 이 없어 지도를 불러올 수 없습니다."
+  },
+  "newTrip": {
+    "header": "새 일정",
+    "backToMap": "← 지도로 돌아가기",
+    "loading": "AI가 일정을 짜는 중… 약 10–20초",
+    "successMessage": "선호도에 맞춰 {count}곳, 약 {hours}시간 일정을 생성했습니다. 우측 채팅에서 수정 요청을 보낼 수 있어요.",
+    "genericFailure": "일정 생성 실패"
+  },
+  "tripDetail": {
+    "backToMap": "← 지도로 돌아가기",
+    "confirmDelete": "이 일정을 삭제할까요?",
+    "notFound": "일정을 찾을 수 없습니다. 삭제되었을 수 있어요.",
+    "backHome": "지도로 돌아가기",
+    "noItinerary": "아직 일정이 생성되지 않았습니다.",
+    "partialMapWarning": "지도에는 {visible}/{total}곳만 표시되고 있어요 — 다른 곳은 좌표가 없습니다(백엔드가 아직 lat/lng을 반환하지 않음).",
+    "summary": {
+      "date": "날짜",
+      "time": "시간대",
+      "budget": "예산",
+      "districts": "지역구",
+      "anyDistrict": "전체",
+      "budgetValue": "NT$ {amount} / 일",
+      "mustVisit": "필수 방문: {names}",
+      "mustVisitMore": "외 {count}곳"
+    },
+    "tags": {
+      "lucky": "🎲 운에 맡기기",
+      "paceCompact": "타이트한 페이스",
+      "paceNormal": "보통 페이스",
+      "paceLeisurely": "여유로운 페이스",
+      "vegetarian": "채식",
+      "halal": "할랄",
+      "lowWalking": "걷기 최소화",
+      "dietOther": "식단: {note}",
+      "dietExtra": "식단 메모: {note}",
+      "transportPublic": "🚇 대중교통",
+      "transportWalk": "🚶 도보",
+      "transportBike": "🚲 자전거",
+      "customTheme": "✏️ {label}"
+    },
+    "chat": {
+      "updatedSummary": "일정이 업데이트되었습니다: {count}곳, 약 {hours}시간.",
+      "regenerateFailed": "재생성 실패: {message}",
+      "unknownError": "알 수 없는 오류"
+    }
+  },
+  "sidebar": {
+    "placesCount": "{count}곳 저장됨",
+    "tabs": {
+      "places": "저장",
+      "recommend": "추천",
+      "trips": "일정"
+    },
+    "places": {
+      "emptyTitle": "저장된 장소가 없습니다",
+      "emptyBody1": "Line 공식 계정에 IG Reels / Threads 링크를 보내거나,",
+      "emptyBody2": "장소 이름을 직접 보내면 자동으로 여기에 표시됩니다.",
+      "filterEmpty": "이 카테고리에 저장된 장소가 없습니다."
+    },
+    "recommend": {
+      "needPlaces": "1곳 이상 저장하면 AI가 취향에 맞는 추천을 해드려요.",
+      "filterEmpty": "이 카테고리에는 추천이 없습니다."
+    },
+    "trips": {
+      "create": "＋ 새 일정",
+      "emptyTitle": "일정이 없습니다",
+      "emptyBody": "위 버튼을 눌러 날짜·예산·취향에 맞는 첫 일정을 만들어 보세요.",
+      "stopsAndHours": "{count}곳 · 약 {hours}시간",
+      "noItinerary": "아직 일정이 없습니다"
+    },
+    "generateButton": "✨ 일정 생성"
+  },
+  "placeCard": {
+    "addToTrip": "일정에 추가",
+    "remove": "제거",
+    "source": {
+      "reels_url": "Reels",
+      "image": "이미지",
+      "text": "텍스트",
+      "manual": "수동"
+    }
+  },
+  "recommendCard": {
+    "similarity": "유사도 {score}",
+    "addToFavorites": "＋ 저장"
+  },
+  "hotelBadge": {
+    "legal": {
+      "label": "🛡️ 합법 숙소",
+      "tip": "정식 등록된 호텔로 확인됨"
+    },
+    "illegal": {
+      "label": "⚠️ 불법 일일 임대 의심",
+      "tip": "소방·안전 우려 가능성. 합법 호텔을 권장합니다"
+    },
+    "unknown": {
+      "label": "❓ 확인 중",
+      "tip": "검증이 완료되지 않았습니다"
+    }
+  },
+  "itinerary": {
+    "header": "일정 타임라인",
+    "stats": "약 {hours}시간 · {count}곳",
+    "stayMinutes": "체류 {minutes}분"
+  },
+  "aiChat": {
+    "header": "AI와 대화",
+    "subheader": "자연어로 일정 변경 사항을 알려주세요",
+    "empty": "아직 대화가 없습니다. 아래 빠른 명령을 시도하거나 직접 입력해 보세요.",
+    "busy": "AI가 일정을 다시 짜고 있어요…",
+    "placeholder": "예: 카페를 푸진가 근처로 옮겨줘",
+    "send": "보내기",
+    "quickPrompts": {
+      "vegetarian": "점심을 채식 친화적으로 바꿔줘",
+      "compact": "일정이 너무 빡빡해, 4곳으로 줄여줘",
+      "history": "다다오청 역사 명소 추가해줘",
+      "budget": "예산을 NT$ 800으로 변경"
+    }
+  },
+  "tripWizard": {
+    "title": "새 일정 만들기",
+    "submit": "생성",
+    "submitWithIcon": "✨ 생성",
+    "steps": {
+      "basic": "기본 정보",
+      "preferences": "선호도",
+      "mustVisit": "필수 방문지"
+    },
+    "tripName": "일정 이름",
+    "tripNamePlaceholder": "예: 주말 다다오청 산책",
+    "dateStart": "시작일",
+    "dateEnd": "종료일",
+    "singleDay": "당일 일정",
+    "multiDay": "{days}일 일정",
+    "dayStart": "하루 시작",
+    "dayEnd": "하루 종료",
+    "diet": "식단 선호",
+    "dietOptions": {
+      "none": "제한 없음",
+      "vegetarian": "채식",
+      "halal": "할랄",
+      "other": "기타"
+    },
+    "dietOtherPlaceholder": "기타 식단 요구를 입력하세요. 예: 저GI, 글루텐 프리, 소고기 제외...",
+    "dietExtraPlaceholder": "추가 메모(알레르기, 매운 것 NO, 파·마늘 NO...)",
+    "mobility": "이동 능력",
+    "mobilityOptions": {
+      "normalLabel": "보통",
+      "normalHint": "보행 가능",
+      "lowLabel": "걷기 최소화",
+      "lowHint": "교통수단 위주, 장거리 보행 회피"
+    },
+    "budget": "예산 (1인 1일 NT$ {amount})",
+    "lucky": {
+      "label": "🎲 운에 맡기기",
+      "reroll": "다시 뽑기",
+      "explain": "AI가 페이스·교통·지역·테마를 무작위로 결정 — 당신은 즐기기만 하세요.",
+      "applied": "아래 선호도에 무작위로 채웠어요. 직접 미세 조정 가능합니다."
+    },
+    "pace": "여행 페이스",
+    "paceOptions": {
+      "compactLabel": "타이트",
+      "compactHint": "하루 6+곳, 알차게 둘러보기",
+      "normalLabel": "보통",
+      "normalHint": "하루 4–5곳",
+      "leisurelyLabel": "여유",
+      "leisurelyHint": "하루 2–3곳, 깊이 체험"
+    },
+    "transport": "교통수단 (복수 선택)",
+    "transportOptions": {
+      "public": "대중교통",
+      "walk": "도보",
+      "bike": "자전거"
+    },
+    "transportRequired": "최소 한 가지 교통수단을 선택하세요",
+    "districts": "지역구 (복수 선택; 미선택 = 타이베이 전역)",
+    "districtNames": {
+      "中正區": "중정구",
+      "大同區": "다퉁구",
+      "中山區": "중산구",
+      "松山區": "쑹산구",
+      "大安區": "다안구",
+      "萬華區": "완화구",
+      "信義區": "신이구",
+      "士林區": "스린구",
+      "北投區": "베이터우구",
+      "內湖區": "네이후구",
+      "南港區": "난강구",
+      "文山區": "원산구"
+    },
+    "themes": "테마 (복수 선택)",
+    "themeOptions": {
+      "food": "🍜 맛집",
+      "nature": "🏞️ 자연",
+      "arts": "🎨 예술",
+      "shopping": "🛍️ 쇼핑",
+      "history": "🏯 역사",
+      "custom": "✏️ 사용자 지정"
+    },
+    "customThemePlaceholder": "사용자 지정 테마: 예 사진, 반려동물 동반...",
+    "expectation": "AI에게 전하고 싶은 여행 기대",
+    "expectationPlaceholder": "예: 점심은 다안구, 오후엔 오래 앉아 글 쓸 카페 찾기...",
+    "mustVisitHint": "일정 생성 시 AI는 저장·추천 장소에서 자동으로 선택해요 — 여기서는 \"꼭 넣을\" 곳만 체크하세요. 모두 비워둬도 괜찮습니다.",
+    "mustVisitEmpty": "저장된 장소가 없습니다. 홈에서 Line으로 추가한 뒤 다시 오세요.",
+    "luckyMixNote": "운에 맡기기 여부와 관계없이, AI는 추천 장소를 적절히 섞어 일정을 풍부하게 만듭니다."
+  },
+  "tripMap": {
+    "noStops": "이 일정에는 지도에 표시할 수 있는 장소가 없습니다",
+    "stayMinutes": "체류 {minutes}분"
+  }
+}

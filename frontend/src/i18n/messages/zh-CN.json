@@ -1,0 +1,241 @@
+{
+  "brand": "Taipei WanderGuard",
+  "common": {
+    "loading": "加载中…",
+    "loadingMap": "加载地图…",
+    "delete": "删除",
+    "cancel": "取消",
+    "back": "上一步",
+    "next": "下一步",
+    "submit": "提交",
+    "save": "保存",
+    "remove": "移除"
+  },
+  "language": {
+    "label": "语言",
+    "switch": "切换语言"
+  },
+  "category": {
+    "all": "全部",
+    "food": "美食",
+    "foodWithIcon": "🍽️ 美食",
+    "attraction": "景点",
+    "attractionWithIcon": "🏛️ 景点",
+    "hotel": "住宿",
+    "hotelWithIcon": "🏨 住宿"
+  },
+  "home": {
+    "confirmRemovePlace": "确定要从收藏中移除这个地点吗？",
+    "confirmDeleteTrip": "确定要删除这个行程吗？",
+    "missingMapboxToken": "缺少 NEXT_PUBLIC_MAPBOX_TOKEN，地图底图无法加载。"
+  },
+  "newTrip": {
+    "header": "新行程",
+    "backToMap": "← 回到地图",
+    "loading": "AI 正在规划你的行程，约 10–20 秒…",
+    "successMessage": "已根据你的偏好生成 {count} 站、约 {hours} 小时的行程。可以在右侧对话窗口中告诉我要怎么修改。",
+    "genericFailure": "行程生成失败"
+  },
+  "tripDetail": {
+    "backToMap": "← 回到地图",
+    "confirmDelete": "确定要删除此行程？",
+    "notFound": "找不到这个行程，可能已被删除。",
+    "backHome": "回到地图",
+    "noItinerary": "尚未生成行程内容。",
+    "partialMapWarning": "地图只显示 {visible}/{total} 站 — 其他站点还没有坐标（后端尚未在行程返回 lat/lng）。",
+    "summary": {
+      "date": "日期",
+      "time": "时段",
+      "budget": "预算",
+      "districts": "行政区",
+      "anyDistrict": "不限",
+      "budgetValue": "NT$ {amount} / 日",
+      "mustVisit": "必去：{names}",
+      "mustVisitMore": "等 {count} 个"
+    },
+    "tags": {
+      "lucky": "🎲 好手气",
+      "paceCompact": "紧凑节奏",
+      "paceNormal": "一般节奏",
+      "paceLeisurely": "惬意节奏",
+      "vegetarian": "素食",
+      "halal": "清真",
+      "lowWalking": "少走路",
+      "dietOther": "饮食：{note}",
+      "dietExtra": "饮食补充：{note}",
+      "transportPublic": "🚇 公共交通",
+      "transportWalk": "🚶 步行",
+      "transportBike": "🚲 自行车",
+      "customTheme": "✏️ {label}"
+    },
+    "chat": {
+      "updatedSummary": "已更新行程：{count} 站、约 {hours} 小时。",
+      "regenerateFailed": "重新生成失败：{message}",
+      "unknownError": "未知错误"
+    }
+  },
+  "sidebar": {
+    "placesCount": "{count} 个收藏",
+    "tabs": {
+      "places": "收藏",
+      "recommend": "推荐",
+      "trips": "行程"
+    },
+    "places": {
+      "emptyTitle": "还没有收藏的地点",
+      "emptyBody1": "把 IG Reels / Threads 链接发给 Line 官方账号，",
+      "emptyBody2": "或直接发地点名称，景点会自动出现在这里。",
+      "filterEmpty": "这个分类目前没有收藏。"
+    },
+    "recommend": {
+      "needPlaces": "先收藏 1 个以上地点，AI 才能根据你的喜好推荐。",
+      "filterEmpty": "这个分类目前没有推荐结果。"
+    },
+    "trips": {
+      "create": "＋ 创建新行程",
+      "emptyTitle": "还没有行程",
+      "emptyBody": "点上方按钮，按日期、预算、偏好生成第一份行程。",
+      "stopsAndHours": "{count} 站 · 约 {hours} 小时",
+      "noItinerary": "尚未生成行程内容"
+    },
+    "generateButton": "✨ 一键生成行程"
+  },
+  "placeCard": {
+    "addToTrip": "加入行程",
+    "remove": "移除",
+    "source": {
+      "reels_url": "Reels",
+      "image": "图片",
+      "text": "文字",
+      "manual": "手动"
+    }
+  },
+  "recommendCard": {
+    "similarity": "相似度 {score}",
+    "addToFavorites": "＋ 加入收藏"
+  },
+  "hotelBadge": {
+    "legal": {
+      "label": "🛡️ 合法住宿",
+      "tip": "已比对到合法旅馆登记"
+    },
+    "illegal": {
+      "label": "⚠️ 疑似非法日租",
+      "tip": "可能有消防安全隐患，建议选择合法旅馆"
+    },
+    "unknown": {
+      "label": "❓ 待确认",
+      "tip": "尚未完成比对"
+    }
+  },
+  "itinerary": {
+    "header": "行程时间轴",
+    "stats": "约 {hours} 小时 · {count} 站",
+    "stayMinutes": "停留 {minutes} 分"
+  },
+  "aiChat": {
+    "header": "与 AI 对话调整",
+    "subheader": "用自然语言告诉 AI 你想怎么改这份行程",
+    "empty": "还没有对话。试试下面的快速指令，或自己输入需求。",
+    "busy": "AI 正在重写行程…",
+    "placeholder": "例如：把咖啡馆换到富锦街附近",
+    "send": "发送",
+    "quickPrompts": {
+      "vegetarian": "把午餐换成素食友好的选项",
+      "compact": "行程太累了，帮我精简成 4 站",
+      "history": "加入大稻埕的历史景点",
+      "budget": "预算改成 NT$ 800"
+    }
+  },
+  "tripWizard": {
+    "title": "创建新行程",
+    "submit": "生成行程",
+    "submitWithIcon": "✨ 生成行程",
+    "steps": {
+      "basic": "基本信息",
+      "preferences": "旅游偏好",
+      "mustVisit": "必去景点"
+    },
+    "tripName": "行程名称",
+    "tripNamePlaceholder": "例如：周末大稻埕散步",
+    "dateStart": "开始日期",
+    "dateEnd": "结束日期",
+    "singleDay": "单日行程",
+    "multiDay": "{days} 天行程",
+    "dayStart": "每日开始",
+    "dayEnd": "每日结束",
+    "diet": "饮食偏好",
+    "dietOptions": {
+      "none": "无限制",
+      "vegetarian": "素食",
+      "halal": "清真",
+      "other": "其他"
+    },
+    "dietOtherPlaceholder": "请描述其他饮食需求，例如：低 GI、无麸质、不吃牛...",
+    "dietExtraPlaceholder": "其他补充（过敏、不吃辣、忌葱蒜...）",
+    "mobility": "行动需求",
+    "mobilityOptions": {
+      "normalLabel": "一般",
+      "normalHint": "可正常步行",
+      "lowLabel": "少走路",
+      "lowHint": "行程偏交通工具，避免长距离步行"
+    },
+    "budget": "预算（每人每日 NT$ {amount}）",
+    "lucky": {
+      "label": "🎲 好手气",
+      "reroll": "重新抽",
+      "explain": "让 AI 随机决定节奏、交通、地区、主题 — 你只要负责去玩。",
+      "applied": "已随机填入下方偏好，可手动微调。"
+    },
+    "pace": "旅游节奏",
+    "paceOptions": {
+      "compactLabel": "紧凑",
+      "compactHint": "每天 6+ 站，看好看满",
+      "normalLabel": "一般",
+      "normalHint": "每天 4–5 站",
+      "leisurelyLabel": "惬意",
+      "leisurelyHint": "每天 2–3 站，深度体验"
+    },
+    "transport": "交通方式（可多选）",
+    "transportOptions": {
+      "public": "公共交通",
+      "walk": "步行",
+      "bike": "自行车"
+    },
+    "transportRequired": "至少选择一种交通方式",
+    "districts": "行政区（可多选；不选代表全台北）",
+    "districtNames": {
+      "中正區": "中正区",
+      "大同區": "大同区",
+      "中山區": "中山区",
+      "松山區": "松山区",
+      "大安區": "大安区",
+      "萬華區": "万华区",
+      "信義區": "信义区",
+      "士林區": "士林区",
+      "北投區": "北投区",
+      "內湖區": "内湖区",
+      "南港區": "南港区",
+      "文山區": "文山区"
+    },
+    "themes": "主题（可多选）",
+    "themeOptions": {
+      "food": "🍜 美食",
+      "nature": "🏞️ 山水",
+      "arts": "🎨 文艺",
+      "shopping": "🛍️ 购物",
+      "history": "🏯 历史",
+      "custom": "✏️ 自定义"
+    },
+    "customThemePlaceholder": "自定义主题：例如 摄影、宠物友好...",
+    "expectation": "想对 AI 说的旅游期待",
+    "expectationPlaceholder": "例如:希望午餐在大安区,下午找个能久坐的咖啡馆写稿...",
+    "mustVisitHint": "生成行程时,AI 会自动从你的收藏与推荐景点中挑选 — 这里只需勾选「一定要排进去」的点。不勾也可以,全部交给 AI 决定。",
+    "mustVisitEmpty": "还没有收藏地点。回到主页通过 Line 添加后再回来。",
+    "luckyMixNote": "无论是否启用好手气,AI 都会适度混入推荐景点丰富行程。"
+  },
+  "tripMap": {
+    "noStops": "这个行程没有可定位的站点",
+    "stayMinutes": "停留 {minutes} 分"
+  }
+}

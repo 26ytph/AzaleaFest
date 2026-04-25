@@ -94,6 +94,10 @@ async def _search_attractions(
         select(
             Attraction.id,
             Attraction.name,
+            Attraction.name_en,
+            Attraction.name_ja,
+            Attraction.name_ko,
+            Attraction.name_zh_cn,
             Attraction.category,
             Attraction.lat,
             Attraction.lng,
@@ -113,13 +117,17 @@ async def _search_attractions(
         {
             "id": r[0],
             "name": r[1],
-            "category": r[2],
-            "lat": r[3],
-            "lng": r[4],
-            "address": r[5],
-            "description": r[6],
-            "tags": list(r[7]) if r[7] else [],
-            "distance": float(r[8]),
+            "name_en": r[2],
+            "name_ja": r[3],
+            "name_ko": r[4],
+            "name_zh_cn": r[5],
+            "category": r[6],
+            "lat": r[7],
+            "lng": r[8],
+            "address": r[9],
+            "description": r[10],
+            "tags": list(r[11]) if r[11] else [],
+            "distance": float(r[12]),
         }
         for r in result.all()
     ]
@@ -237,6 +245,10 @@ async def find_similar(
             "attraction": {
                 "id": by_id[aid]["id"],
                 "name": by_id[aid]["name"],
+                "name_en": by_id[aid].get("name_en"),
+                "name_ja": by_id[aid].get("name_ja"),
+                "name_ko": by_id[aid].get("name_ko"),
+                "name_zh_cn": by_id[aid].get("name_zh_cn"),
                 "category": by_id[aid]["category"],
                 "lat": by_id[aid]["lat"],
                 "lng": by_id[aid]["lng"],

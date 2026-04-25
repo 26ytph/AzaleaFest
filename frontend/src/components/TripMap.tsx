@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
+import { useTranslations } from 'next-intl'
 import type { ItineraryStop } from '@/lib/types'
 
 export type EnrichedStop = ItineraryStop & {
@@ -41,6 +42,7 @@ export default function TripMap({
   onSelectStop,
   height = '420px',
 }: TripMapProps) {
+  const t = useTranslations()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const markersRef = useRef<mapboxgl.Marker[]>([])
@@ -122,7 +124,7 @@ export default function TripMap({
         const popupHtml =
           '<div class="wg-pop">' +
           `<div class="wg-pop-title">${idx + 1}. ${escapeHtml(stop.name)}</div>` +
-          `<div class="wg-pop-cat">🕒 ${escapeHtml(stop.time)} · 停留 ${stop.duration_min} 分</div>` +
+          `<div class="wg-pop-cat">🕒 ${escapeHtml(stop.time)} · ${escapeHtml(t('tripMap.stayMinutes', { minutes: stop.duration_min }))}</div>` +
           (stop.transport_to_next
             ? `<div class="wg-pop-desc">→ ${escapeHtml(stop.transport_to_next)}</div>`
             : '') +
@@ -172,7 +174,7 @@ export default function TripMap({
 
     if (map.isStyleLoaded()) apply()
     else map.once('load', apply)
-  }, [stops, selectedPlaceId, onSelectStop])
+  }, [stops, selectedPlaceId, onSelectStop, t])
 
   // flyTo on select
   useEffect(() => {
@@ -194,12 +196,12 @@ export default function TripMap({
       <div ref={containerRef} className="absolute inset-0 h-full" />
       {!TOKEN && (
         <div className="absolute left-3 top-3 rounded bg-amber-100 px-3 py-2 text-xs text-amber-800 shadow">
-          缺少 NEXT_PUBLIC_MAPBOX_TOKEN，地圖底圖無法載入。
+          {t('home.missingMapboxToken')}
         </div>
       )}
       {stops.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-sm text-slate-500">
-          這個行程沒有可定位的站點
+          {t('tripMap.noStops')}
         </div>
       )}
     </div>

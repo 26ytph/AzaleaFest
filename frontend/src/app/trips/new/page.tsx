@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import TripWizard from '@/components/TripWizard'
 import { usePlaces } from '@/hooks/usePlaces'
 import { api, getSessionId } from '@/lib/api'
@@ -11,6 +12,7 @@ import type { TripPreferences } from '@/lib/trip-types'
 
 export default function NewTripPage() {
   const router = useRouter()
+  const t = useTranslations()
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,11 +36,14 @@ export default function NewTripPage() {
       tripsStore.appendChat(
         trip.id,
         'assistant',
-        `已根據你的偏好生成 ${itinerary.stops.length} 站、約 ${itinerary.total_duration_hours} 小時的行程。可以在右側對話視窗中告訴我要怎麼修改。`,
+        t('newTrip.successMessage', {
+          count: itinerary.stops.length,
+          hours: itinerary.total_duration_hours,
+        }),
       )
       router.push(`/trips/${trip.id}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '行程生成失敗')
+      setError(e instanceof Error ? e.message : t('newTrip.genericFailure'))
       setSubmitting(false)
     }
   }
@@ -48,9 +53,9 @@ export default function NewTripPage() {
       <header className="border-b border-slate-200 bg-white px-6 py-3">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
           <Link href="/" className="text-sm text-slate-500 hover:text-slate-700">
-            ← 回到地圖
+            {t('newTrip.backToMap')}
           </Link>
-          <h1 className="text-sm font-semibold text-slate-900">新行程</h1>
+          <h1 className="text-sm font-semibold text-slate-900">{t('newTrip.header')}</h1>
           <span className="w-16" />
         </div>
       </header>
@@ -65,7 +70,7 @@ export default function NewTripPage() {
         {submitting ? (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white p-12">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
-            <p className="text-sm text-slate-600">AI 正在規劃你的行程，約 10–20 秒…</p>
+            <p className="text-sm text-slate-600">{t('newTrip.loading')}</p>
           </div>
         ) : (
           <TripWizard

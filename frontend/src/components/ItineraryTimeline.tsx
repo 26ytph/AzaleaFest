@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import type { Itinerary, ItineraryStop } from '@/lib/types'
 
 export interface ItineraryTimelineProps {
@@ -15,6 +16,7 @@ export default function ItineraryTimeline({
   onChange,
   onSelectStop,
 }: ItineraryTimelineProps) {
+  const t = useTranslations()
   const updateStop = (idx: number, patch: Partial<ItineraryStop>) => {
     if (!onChange) return
     const stops = itinerary.stops.map((s, i) => (i === idx ? { ...s, ...patch } : s))
@@ -39,9 +41,12 @@ export default function ItineraryTimeline({
   return (
     <div className="space-y-1">
       <header className="flex items-center justify-between border-b border-slate-200 pb-2">
-        <h2 className="text-sm font-semibold text-slate-700">行程時間軸</h2>
+        <h2 className="text-sm font-semibold text-slate-700">{t('itinerary.header')}</h2>
         <span className="text-xs text-slate-500">
-          約 {itinerary.total_duration_hours} 小時 · {itinerary.stops.length} 站
+          {t('itinerary.stats', {
+            hours: itinerary.total_duration_hours,
+            count: itinerary.stops.length,
+          })}
         </span>
       </header>
 
@@ -67,7 +72,7 @@ export default function ItineraryTimeline({
                     {stop.time}
                   </span>
                 )}
-                <span className="text-xs text-slate-500">停留 {stop.duration_min} 分</span>
+                <span className="text-xs text-slate-500">{t('itinerary.stayMinutes', { minutes: stop.duration_min })}</span>
               </div>
 
               {editable ? (
@@ -130,7 +135,7 @@ export default function ItineraryTimeline({
                     }}
                     className="ml-auto rounded px-2 py-0.5 text-rose-600 hover:bg-rose-50"
                   >
-                    刪除
+                    {t('common.delete')}
                   </button>
                 </div>
               )}

@@ -24,10 +24,18 @@ class RecommendRequest(BaseModel):
 
 
 class AttractionOut(BaseModel):
-    """對齊 frontend/src/lib/types.ts Attraction（spec M0.5）。"""
+    """對齊 frontend/src/lib/types.ts Attraction（spec M0.5）。
+
+    name_en/ja/ko/zh_cn 由 scripts/translate_attractions.py backfill；
+    前端依 locale 挑欄位，缺則 fallback 到 name。
+    """
 
     id: int
     name: str
+    name_en: str | None = None
+    name_ja: str | None = None
+    name_ko: str | None = None
+    name_zh_cn: str | None = None
     category: str
     lat: float
     lng: float

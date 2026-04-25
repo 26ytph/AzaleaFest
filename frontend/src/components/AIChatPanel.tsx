@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import clsx from 'clsx'
+import { useLocale, useTranslations } from 'next-intl'
 import type { ChatTurn } from '@/lib/trip-types'
 
 export interface AIChatPanelProps {
@@ -10,14 +11,11 @@ export interface AIChatPanelProps {
   busy?: boolean
 }
 
-const QUICK_PROMPTS = [
-  '把午餐換成素食友善的選項',
-  '行程太累了，幫我精簡成 4 站',
-  '加入大稻埕的歷史景點',
-  '預算改成 NT$ 800',
-]
+const QUICK_PROMPT_KEYS = ['vegetarian', 'compact', 'history', 'budget'] as const
 
 export default function AIChatPanel({ history, onSend, busy }: AIChatPanelProps) {
+  const t = useTranslations()
+  const locale = useLocale()
   const [draft, setDraft] = useState('')
 
   const send = async (text: string) => {
@@ -30,37 +28,38 @@ export default function AIChatPanel({ history, onSend, busy }: AIChatPanelProps)
   return (
     <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
       <header className="border-b border-slate-200 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-900">與 AI 對話調整</h2>
-        <p className="text-[11px] text-slate-500">用自然語言告訴 AI 你想怎麼改這份行程</p>
+        <h2 className="text-sm font-semibold text-slate-900">{t('aiChat.header')}</h2>
+        <p className="text-[11px] text-slate-500">{t('aiChat.subheader')}</p>
       </header>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3 scrollbar-thin">
         {history.length === 0 && (
           <div className="rounded-lg border border-dashed border-slate-200 p-3 text-xs text-slate-500">
-            還沒有對話。試試下面的快速指令，或自己輸入需求。
+            {t('aiChat.empty')}
           </div>
         )}
         {history.map((turn, i) => (
-          <ChatBubble key={i} turn={turn} />
+          <ChatBubble key={i} turn={turn} locale={locale} />
         ))}
-        {busy && (
-          <div className="text-xs text-slate-400">AI 正在重寫行程…</div>
-        )}
+        {busy && <div className="text-xs text-slate-400">{t('aiChat.busy')}</div>}
       </div>
 
       <div className="border-t border-slate-100 px-4 pb-2 pt-3">
         <div className="mb-2 flex flex-wrap gap-1">
-          {QUICK_PROMPTS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => send(p)}
-              disabled={busy}
-              className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600 hover:border-blue-300 hover:text-blue-600 disabled:opacity-40"
-            >
-              {p}
-            </button>
-          ))}
+          {QUICK_PROMPT_KEYS.map((key) => {
+            const label = t(`aiChat.quickPrompts.${key}` as any)
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => send(label)}
+                disabled={busy}
+                className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600 hover:border-blue-300 hover:text-blue-600 disabled:opacity-40"
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -80,7 +79,7 @@ export default function AIChatPanel({ history, onSend, busy }: AIChatPanelProps)
               send(draft)
             }
           }}
-          placeholder="例如：把咖啡廳換到富錦街附近"
+          placeholder={t('aiChat.placeholder')}
           rows={2}
           className="flex-1 resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
         />
@@ -89,14 +88,14 @@ export default function AIChatPanel({ history, onSend, busy }: AIChatPanelProps)
           disabled={busy || draft.trim().length === 0}
           className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          送出
+          {t('aiChat.send')}
         </button>
       </form>
     </section>
   )
 }
 
-function ChatBubble({ turn }: { turn: ChatTurn }) {
+function ChatBubble({ turn, locale }: { turn: ChatTurn; locale: string }) {
   const isUser = turn.role === 'user'
   return (
     <div className={clsx('flex', isUser ? 'justify-end' : 'justify-start')}>
@@ -115,7 +114,7 @@ function ChatBubble({ turn }: { turn: ChatTurn }) {
             isUser ? 'text-blue-100' : 'text-slate-400',
           )}
         >
-          {new Date(turn.ts).toLocaleTimeString('zh-TW', {
+          {new Date(turn.ts).toLocaleTimeString(locale, {
             hour: '2-digit',
             minute: '2-digit',
           })}

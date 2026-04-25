@@ -3,7 +3,10 @@
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
+import { useLocale, useTranslations } from 'next-intl'
+import type { Locale } from '@/i18n/config'
 import type { Place, RecommendResult } from '@/lib/types'
+import { pickName } from '@/lib/i18n'
 
 export interface MapProps {
   places: Place[]
@@ -14,18 +17,6 @@ export interface MapProps {
 
 const TAIPEI_CENTER: [number, number] = [121.5654, 25.033]
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-
-const CATEGORY_LABEL: Record<string, string> = {
-  food: '🍽️ 美食',
-  attraction: '🏛️ 景點',
-  hotel: '🏨 住宿',
-}
-
-const HOTEL_BADGE: Record<string, string> = {
-  legal: '🛡️ 合法旅宿',
-  illegal: '⚠️ 疑似非法日租',
-  unknown: '❓ 待確認',
-}
 
 function escapeHtml(s: string | null | undefined): string {
   if (!s) return ''
@@ -40,30 +31,38 @@ function escapeHtml(s: string | null | undefined): string {
   })
 }
 
-function buildPlacePopup(p: Place): string {
+function buildPlacePopup(
+  p: Place,
+  categoryLabel: string,
+  hotelBadgeLabel: string | null,
+): string {
   const parts: string[] = []
   parts.push(`<div class="wg-pop-title">${escapeHtml(p.name)}</div>`)
-  parts.push(`<div class="wg-pop-cat">${CATEGORY_LABEL[p.category] ?? ''}</div>`)
+  parts.push(`<div class="wg-pop-cat">${escapeHtml(categoryLabel)}</div>`)
   if (p.address) parts.push(`<div class="wg-pop-addr">${escapeHtml(p.address)}</div>`)
   if (p.description) parts.push(`<div class="wg-pop-desc">${escapeHtml(p.description)}</div>`)
-  if (p.category === 'hotel' && p.hotel_legal_status) {
-    parts.push(`<div class="wg-pop-hotel ${p.hotel_legal_status}">${HOTEL_BADGE[p.hotel_legal_status]}</div>`)
+  if (p.category === 'hotel' && p.hotel_legal_status && hotelBadgeLabel) {
+    parts.push(`<div class="wg-pop-hotel ${p.hotel_legal_status}">${escapeHtml(hotelBadgeLabel)}</div>`)
   }
   return `<div class="wg-pop">${parts.join('')}</div>`
 }
 
-function buildRecPopup(r: RecommendResult): string {
+function buildRecPopup(
+  r: RecommendResult,
+  displayName: string,
+  categoryLabel: string,
+): string {
   const a = r.attraction
   const parts: string[] = []
-  parts.push(`<div class="wg-pop-title">${escapeHtml(a.name)}</div>`)
-  parts.push(`<div class="wg-pop-cat">${CATEGORY_LABEL[a.category] ?? '📍 推薦'}</div>`)
+  parts.push(`<div class="wg-pop-title">${escapeHtml(displayName)}</div>`)
+  parts.push(`<div class="wg-pop-cat">${escapeHtml(categoryLabel)}</div>`)
   if (a.address) parts.push(`<div class="wg-pop-addr">${escapeHtml(a.address)}</div>`)
   if (r.reason) parts.push(`<div class="wg-pop-reason">「${escapeHtml(r.reason)}」</div>`)
   if (a.tags?.length) {
     parts.push(
       `<div class="wg-pop-tags">${a.tags
         .slice(0, 5)
-        .map((t) => `<span>#${escapeHtml(t)}</span>`)
+        .map((tag) => `<span>#${escapeHtml(tag)}</span>`)
         .join(' ')}</div>`,
     )
   }
@@ -76,10 +75,21 @@ export default function MapView({
   selectedId,
   onMarkerClick,
 }: MapProps) {
+  const t = useTranslations()
+  const locale = useLocale() as Locale
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const markersRef = useRef<globalThis.Map<string, mapboxgl.Marker>>(new globalThis.Map())
   const popupsRef = useRef<globalThis.Map<string, mapboxgl.Popup>>(new globalThis.Map())
+
+  const categoryLabel = (cat: string): string => {
+    if (cat === 'food') return t('category.foodWithIcon')
+    if (cat === 'attraction') return t('category.attractionWithIcon')
+    if (cat === 'hotel') return t('category.hotelWithIcon')
+    return ''
+  }
+  const hotelBadgeLabel = (status: 'legal' | 'illegal' | 'unknown'): string =>
+    t(`hotelBadge.${status}.label` as any)
 
   // init once
   useEffect(() => {
@@ -173,19 +183,22 @@ export default function MapView({
     }
 
     for (const p of places) {
+      const legalStatus = p.category === 'hotel' ? p.hotel_legal_status : null
+      const badgeLabel = legalStatus ? hotelBadgeLabel(legalStatus) : null
       setup(
         `p:${p.id}`,
         p.lng,
         p.lat,
         'place',
         selectedId === p.id,
-        p.category === 'hotel' ? p.hotel_legal_status : null,
-        buildPlacePopup(p),
+        legalStatus,
+        buildPlacePopup(p, categoryLabel(p.category), badgeLabel),
         () => onMarkerClick(p.id, 'place'),
       )
     }
 
     for (const r of recommendations) {
+      const displayName = pickName(r.attraction, locale)
       setup(
         `r:${r.attraction.id}`,
         r.attraction.lng,
@@ -193,7 +206,7 @@ export default function MapView({
         'recommendation',
         selectedId === r.attraction.id,
         null,
-        buildRecPopup(r),
+        buildRecPopup(r, displayName, categoryLabel(r.attraction.category)),
         () => onMarkerClick(r.attraction.id, 'recommendation'),
       )
     }
@@ -206,7 +219,7 @@ export default function MapView({
         popupsRef.current.delete(key)
       }
     }
-  }, [places, recommendations, selectedId, onMarkerClick])
+  }, [places, recommendations, selectedId, onMarkerClick, locale, t])
 
   // flyTo selection
   useEffect(() => {
@@ -223,7 +236,7 @@ export default function MapView({
       <div ref={containerRef} className="absolute inset-0 h-full" />
       {!TOKEN && (
         <div className="absolute left-3 top-3 rounded bg-amber-100 px-3 py-2 text-xs text-amber-800 shadow">
-          缺少 NEXT_PUBLIC_MAPBOX_TOKEN，地圖底圖無法載入。
+          {t('home.missingMapboxToken')}
         </div>
       )}
     </div>

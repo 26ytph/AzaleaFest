@@ -1,19 +1,28 @@
 import type { Metadata } from 'next'
+import { NextIntlClientProvider } from 'next-intl'
+import { getLocale, getMessages } from 'next-intl/server'
+
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Taipei WanderGuard',
-  description: '把 IG / Threads 的旅遊靈感整理成台北行程',
+  description: 'Turn IG / Threads travel inspiration into Taipei itineraries',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const locale = await getLocale()
+  const messages = await getMessages()
   return (
-    <html lang="zh-TW">
-      <body>{children}</body>
+    <html lang={locale}>
+      <body>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          {children}
+        </NextIntlClientProvider>
+      </body>
     </html>
   )
 }

@@ -1,0 +1,241 @@
+{
+  "brand": "Taipei WanderGuard",
+  "common": {
+    "loading": "読み込み中…",
+    "loadingMap": "地図を読み込み中…",
+    "delete": "削除",
+    "cancel": "キャンセル",
+    "back": "戻る",
+    "next": "次へ",
+    "submit": "送信",
+    "save": "保存",
+    "remove": "削除"
+  },
+  "language": {
+    "label": "言語",
+    "switch": "言語を切り替え"
+  },
+  "category": {
+    "all": "すべて",
+    "food": "グルメ",
+    "foodWithIcon": "🍽️ グルメ",
+    "attraction": "観光地",
+    "attractionWithIcon": "🏛️ 観光地",
+    "hotel": "宿泊",
+    "hotelWithIcon": "🏨 宿泊"
+  },
+  "home": {
+    "confirmRemovePlace": "この場所をお気に入りから削除しますか？",
+    "confirmDeleteTrip": "この旅程を削除しますか？",
+    "missingMapboxToken": "NEXT_PUBLIC_MAPBOX_TOKEN が未設定のため、地図を表示できません。"
+  },
+  "newTrip": {
+    "header": "新しい旅程",
+    "backToMap": "← 地図に戻る",
+    "loading": "AI が旅程を作成中…約 10〜20 秒",
+    "successMessage": "ご希望に合わせて {count} スポット・約 {hours} 時間の旅程を生成しました。右側のチャットから調整できます。",
+    "genericFailure": "旅程の生成に失敗しました"
+  },
+  "tripDetail": {
+    "backToMap": "← 地図に戻る",
+    "confirmDelete": "この旅程を削除しますか？",
+    "notFound": "この旅程は見つかりません。削除された可能性があります。",
+    "backHome": "地図に戻る",
+    "noItinerary": "旅程はまだ作成されていません。",
+    "partialMapWarning": "地図には {visible}/{total} スポットのみ表示されています — 他の場所は座標がありません（バックエンドが lat/lng を返していません）。",
+    "summary": {
+      "date": "日付",
+      "time": "時間帯",
+      "budget": "予算",
+      "districts": "エリア",
+      "anyDistrict": "指定なし",
+      "budgetValue": "NT$ {amount} / 日",
+      "mustVisit": "必訪：{names}",
+      "mustVisitMore": "他 {count} 件"
+    },
+    "tags": {
+      "lucky": "🎲 おまかせ",
+      "paceCompact": "詰め込み",
+      "paceNormal": "標準",
+      "paceLeisurely": "ゆったり",
+      "vegetarian": "ベジタリアン",
+      "halal": "ハラール",
+      "lowWalking": "歩行少なめ",
+      "dietOther": "食事：{note}",
+      "dietExtra": "食事メモ：{note}",
+      "transportPublic": "🚇 公共交通",
+      "transportWalk": "🚶 徒歩",
+      "transportBike": "🚲 自転車",
+      "customTheme": "✏️ {label}"
+    },
+    "chat": {
+      "updatedSummary": "旅程を更新しました：{count} スポット・約 {hours} 時間。",
+      "regenerateFailed": "再生成に失敗：{message}",
+      "unknownError": "不明なエラー"
+    }
+  },
+  "sidebar": {
+    "placesCount": "{count} 件保存済み",
+    "tabs": {
+      "places": "保存",
+      "recommend": "おすすめ",
+      "trips": "旅程"
+    },
+    "places": {
+      "emptyTitle": "保存した場所はまだありません",
+      "emptyBody1": "Line 公式アカウントに IG Reels / Threads のリンクを送るか、",
+      "emptyBody2": "場所の名前をそのまま送ると、ここに自動で表示されます。",
+      "filterEmpty": "このカテゴリーには保存された場所がありません。"
+    },
+    "recommend": {
+      "needPlaces": "1 件以上保存すると、AI がおすすめを表示します。",
+      "filterEmpty": "このカテゴリーにはおすすめがまだありません。"
+    },
+    "trips": {
+      "create": "＋ 新しい旅程",
+      "emptyTitle": "旅程はまだありません",
+      "emptyBody": "上のボタンから日付・予算・好みに合わせて最初の旅程を作成しましょう。",
+      "stopsAndHours": "{count} スポット · 約 {hours} 時間",
+      "noItinerary": "旅程はまだ作成されていません"
+    },
+    "generateButton": "✨ 旅程を生成"
+  },
+  "placeCard": {
+    "addToTrip": "旅程に追加",
+    "remove": "削除",
+    "source": {
+      "reels_url": "Reels",
+      "image": "画像",
+      "text": "テキスト",
+      "manual": "手動"
+    }
+  },
+  "recommendCard": {
+    "similarity": "類似度 {score}",
+    "addToFavorites": "＋ お気に入り"
+  },
+  "hotelBadge": {
+    "legal": {
+      "label": "🛡️ 認可済み",
+      "tip": "正規登録ホテルとして照合済み"
+    },
+    "illegal": {
+      "label": "⚠️ 違法民泊の疑い",
+      "tip": "防火面のリスクの可能性があります。認可ホテルをおすすめします"
+    },
+    "unknown": {
+      "label": "❓ 確認中",
+      "tip": "照合は未完了です"
+    }
+  },
+  "itinerary": {
+    "header": "旅程タイムライン",
+    "stats": "約 {hours} 時間 · {count} スポット",
+    "stayMinutes": "滞在 {minutes} 分"
+  },
+  "aiChat": {
+    "header": "AI とチャット",
+    "subheader": "自然言語で AI に旅程の調整を伝えましょう",
+    "empty": "まだ会話はありません。下のクイックプロンプトを試すか、自分で入力しましょう。",
+    "busy": "AI が旅程を再構築中…",
+    "placeholder": "例：富錦街の近くにカフェを移動",
+    "send": "送信",
+    "quickPrompts": {
+      "vegetarian": "ランチをベジタリアン対応に",
+      "compact": "詰め込みすぎ。4 スポットに減らして",
+      "history": "大稻埕の歴史スポットを追加",
+      "budget": "予算を NT$ 800 に変更"
+    }
+  },
+  "tripWizard": {
+    "title": "新しい旅程を作成",
+    "submit": "生成",
+    "submitWithIcon": "✨ 生成",
+    "steps": {
+      "basic": "基本情報",
+      "preferences": "好み",
+      "mustVisit": "必訪スポット"
+    },
+    "tripName": "旅程名",
+    "tripNamePlaceholder": "例：週末の大稻埕散歩",
+    "dateStart": "開始日",
+    "dateEnd": "終了日",
+    "singleDay": "日帰り旅程",
+    "multiDay": "{days} 日間の旅程",
+    "dayStart": "1 日の開始",
+    "dayEnd": "1 日の終了",
+    "diet": "食事の好み",
+    "dietOptions": {
+      "none": "制限なし",
+      "vegetarian": "ベジタリアン",
+      "halal": "ハラール",
+      "other": "その他"
+    },
+    "dietOtherPlaceholder": "他の食事制限を入力（例：低 GI、グルテンフリー、牛肉なし...）",
+    "dietExtraPlaceholder": "補足（アレルギー、辛さ控えめ、ねぎ・にんにく抜き...）",
+    "mobility": "歩行のしやすさ",
+    "mobilityOptions": {
+      "normalLabel": "通常",
+      "normalHint": "問題なく歩ける",
+      "lowLabel": "歩行少なめ",
+      "lowHint": "交通手段を中心に、長距離歩行は避ける"
+    },
+    "budget": "予算（1 人 1 日あたり NT$ {amount}）",
+    "lucky": {
+      "label": "🎲 おまかせ",
+      "reroll": "再抽選",
+      "explain": "ペース・交通・エリア・テーマを AI がランダムに決定 — あとは楽しむだけ。",
+      "applied": "下の好みにランダム反映済み。手動で微調整できます。"
+    },
+    "pace": "ペース",
+    "paceOptions": {
+      "compactLabel": "詰め込み",
+      "compactHint": "1 日 6 か所以上、見尽くす",
+      "normalLabel": "標準",
+      "normalHint": "1 日 4〜5 か所",
+      "leisurelyLabel": "ゆったり",
+      "leisurelyHint": "1 日 2〜3 か所、ディープ体験"
+    },
+    "transport": "交通手段（複数選択可）",
+    "transportOptions": {
+      "public": "公共交通",
+      "walk": "徒歩",
+      "bike": "自転車"
+    },
+    "transportRequired": "1 つ以上の交通手段を選んでください",
+    "districts": "エリア（複数選択可、未選択 = 台北全域）",
+    "districtNames": {
+      "中正區": "中正区",
+      "大同區": "大同区",
+      "中山區": "中山区",
+      "松山區": "松山区",
+      "大安區": "大安区",
+      "萬華區": "万華区",
+      "信義區": "信義区",
+      "士林區": "士林区",
+      "北投區": "北投区",
+      "內湖區": "内湖区",
+      "南港區": "南港区",
+      "文山區": "文山区"
+    },
+    "themes": "テーマ（複数選択可）",
+    "themeOptions": {
+      "food": "🍜 グルメ",
+      "nature": "🏞️ 自然",
+      "arts": "🎨 アート",
+      "shopping": "🛍️ ショッピング",
+      "history": "🏯 歴史",
+      "custom": "✏️ カスタム"
+    },
+    "customThemePlaceholder": "カスタムテーマ：例 写真撮影、ペット同伴...",
+    "expectation": "AI に伝えたい旅の希望",
+    "expectationPlaceholder": "例：ランチは大安区、午後は長居できるカフェで原稿を書きたい...",
+    "mustVisitHint": "旅程作成時、AI は保存・おすすめから自動で選びます — ここでは「絶対に外せない」スポットだけチェック。すべて未チェックでも構いません。",
+    "mustVisitEmpty": "保存された場所はまだありません。ホームから Line で追加してください。",
+    "luckyMixNote": "おまかせの有無に関わらず、AI は推薦スポットを適度にミックスします。"
+  },
+  "tripMap": {
+    "noStops": "この旅程には地図表示できるスポットがありません",
+    "stayMinutes": "滞在 {minutes} 分"
+  }
+}

@@ -31,6 +31,13 @@ export interface PlaceCreate {
 export interface Attraction {
   id: number
   name: string
+  // Backend backfills these via scripts/translate_attractions.py.
+  // Frontend reads via pickName(attraction, locale) so missing locales
+  // fall back to `name`.
+  name_en?: string | null
+  name_ja?: string | null
+  name_ko?: string | null
+  name_zh_cn?: string | null
   category: string
   lat: number
   lng: number

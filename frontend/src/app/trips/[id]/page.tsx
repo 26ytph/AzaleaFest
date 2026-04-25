@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import ItineraryTimeline from '@/components/ItineraryTimeline'
 import AIChatPanel from '@/components/AIChatPanel'
 import { useTrip } from '@/hooks/useTrips'
@@ -18,7 +19,7 @@ const TripMap = dynamic(() => import('@/components/TripMap'), {
   ssr: false,
   loading: () => (
     <div className="flex h-[420px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400">
-      載入地圖…
+      …
     </div>
   ),
 })
@@ -27,6 +28,7 @@ export default function TripDetailPage() {
   const params = useParams<{ id: string }>()
   const tripId = params?.id ?? null
   const router = useRouter()
+  const t = useTranslations()
   const { trip } = useTrip(tripId)
 
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -39,9 +41,6 @@ export default function TripDetailPage() {
 
   const { places } = usePlaces(sessionId)
 
-  // Enrich stops with lat/lng by joining against the user's places + mock
-  // recommendations. In production the spec API would need to include coords
-  // (or expose a /attractions/:id endpoint) so we can drop the mock fallback.
   const enrichedStops = useMemo<EnrichedStop[]>(() => {
     if (!trip?.itinerary) return []
     const placeMap = new Map(places.map((p) => [p.id, { lat: p.lat, lng: p.lng }]))
@@ -63,9 +62,9 @@ export default function TripDetailPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50">
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <p className="text-sm text-slate-600">找不到這個行程，可能已被刪除。</p>
+          <p className="text-sm text-slate-600">{t('tripDetail.notFound')}</p>
           <Link href="/" className="mt-4 inline-block text-sm text-blue-600 hover:underline">
-            回到地圖
+            {t('tripDetail.backHome')}
           </Link>
         </div>
       </main>
@@ -81,10 +80,6 @@ export default function TripDetailPage() {
     tripsStore.appendChat(trip.id, 'user', prompt)
     setAiBusy(true)
     try {
-      // Spec only defines POST /itinerary/generate; we re-call it as the
-      // refinement endpoint and let the backend interpret the user prompt
-      // by including it in trip preferences.expectation. This stays within
-      // the spec's HTTP contract.
       const merged = {
         ...trip.preferences,
         expectation: [trip.preferences.expectation, prompt].filter(Boolean).join('\n'),
@@ -100,13 +95,18 @@ export default function TripDetailPage() {
       tripsStore.appendChat(
         trip.id,
         'assistant',
-        `已更新行程：${next.stops.length} 站、約 ${next.total_duration_hours} 小時。`,
+        t('tripDetail.chat.updatedSummary', {
+          count: next.stops.length,
+          hours: next.total_duration_hours,
+        }),
       )
     } catch (e) {
       tripsStore.appendChat(
         trip.id,
         'assistant',
-        `重新生成失敗：${e instanceof Error ? e.message : '未知錯誤'}`,
+        t('tripDetail.chat.regenerateFailed', {
+          message: e instanceof Error ? e.message : t('tripDetail.chat.unknownError'),
+        }),
       )
     } finally {
       setAiBusy(false)
@@ -118,7 +118,7 @@ export default function TripDetailPage() {
       <header className="border-b border-slate-200 bg-white px-6 py-3">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           <Link href="/" className="text-sm text-slate-500 hover:text-slate-700">
-            ← 回到地圖
+            {t('tripDetail.backToMap')}
           </Link>
           <input
             type="text"
@@ -129,14 +129,14 @@ export default function TripDetailPage() {
           <button
             type="button"
             onClick={() => {
-              if (confirm('確定要刪除此行程？')) {
+              if (confirm(t('tripDetail.confirmDelete'))) {
                 tripsStore.remove(trip.id)
                 router.push('/')
               }
             }}
             className="rounded text-sm text-rose-600 hover:bg-rose-50 px-2 py-1"
           >
-            刪除
+            {t('common.delete')}
           </button>
         </div>
       </header>
@@ -170,15 +170,17 @@ export default function TripDetailPage() {
               />
             ) : (
               <div className="py-12 text-center text-sm text-slate-500">
-                尚未生成行程內容。
+                {t('tripDetail.noItinerary')}
               </div>
             )}
           </div>
 
           {trip.itinerary && enrichedStops.length < trip.itinerary.stops.length && (
             <p className="rounded bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-              地圖只顯示 {enrichedStops.length} / {trip.itinerary.stops.length} 站 —
-              其他站點還沒有座標（後端尚未在行程回傳 lat/lng）。
+              {t('tripDetail.partialMapWarning', {
+                visible: enrichedStops.length,
+                total: trip.itinerary.stops.length,
+              })}
             </p>
           )}
         </section>
@@ -202,33 +204,45 @@ function PreferencesSummary({
   trip: { preferences: import('@/lib/trip-types').TripPreferences }
   placeNamesById: Record<number, string>
 }) {
+  const t = useTranslations()
   const p = trip.preferences
 
-  const transportLabel: Record<string, string> = {
-    public: '🚇 大眾運輸',
-    walk: '🚶 步行',
-    bike: '🚲 自行車',
+  const transportTagKey: Record<string, string> = {
+    public: 'transportPublic',
+    walk: 'transportWalk',
+    bike: 'transportBike',
   }
-  const paceLabel: Record<string, string> = {
-    compact: '緊湊節奏',
-    normal: '一般節奏',
-    leisurely: '愜意節奏',
+  const paceTagKey: Record<string, string> = {
+    compact: 'paceCompact',
+    normal: 'paceNormal',
+    leisurely: 'paceLeisurely',
+  }
+  const themeIconLabel: Record<string, string> = {
+    food: '🍜',
+    nature: '🏞️',
+    arts: '🎨',
+    shopping: '🛍️',
+    history: '🏯',
   }
 
   const tags: string[] = []
-  if (p.luckyPick) tags.push('🎲 好手氣')
-  tags.push(paceLabel[p.pace] ?? '一般節奏')
-  if (p.diet === 'vegetarian') tags.push('素食')
-  if (p.diet === 'halal') tags.push('清真')
-  if (p.diet === 'other' && p.dietNote) tags.push(`飲食：${p.dietNote}`)
-  else if (p.dietNote) tags.push(`飲食補充：${p.dietNote}`)
-  if (p.mobility === 'low_walking') tags.push('少走路')
-  for (const t of p.transport) {
-    if (transportLabel[t]) tags.push(transportLabel[t])
+  if (p.luckyPick) tags.push(t('tripDetail.tags.lucky'))
+  tags.push(t(`tripDetail.tags.${paceTagKey[p.pace] ?? 'paceNormal'}` as any))
+  if (p.diet === 'vegetarian') tags.push(t('tripDetail.tags.vegetarian'))
+  if (p.diet === 'halal') tags.push(t('tripDetail.tags.halal'))
+  if (p.diet === 'other' && p.dietNote)
+    tags.push(t('tripDetail.tags.dietOther', { note: p.dietNote }))
+  else if (p.dietNote) tags.push(t('tripDetail.tags.dietExtra', { note: p.dietNote }))
+  if (p.mobility === 'low_walking') tags.push(t('tripDetail.tags.lowWalking'))
+  for (const tr of p.transport) {
+    const key = transportTagKey[tr]
+    if (key) tags.push(t(`tripDetail.tags.${key}` as any))
   }
-  for (const t of p.themes) {
-    if (t === 'custom' && p.customTheme) tags.push(`✏️ ${p.customTheme}`)
-    else if (t !== 'custom') tags.push(t)
+  for (const th of p.themes) {
+    if (th === 'custom' && p.customTheme)
+      tags.push(t('tripDetail.tags.customTheme', { label: p.customTheme }))
+    else if (th !== 'custom' && themeIconLabel[th])
+      tags.push(`${themeIconLabel[th]} ${t(`tripWizard.themeOptions.${th}` as any).replace(/^[^\s]*\s/, '')}`)
   }
 
   const mustVisitNames = p.mustVisitPlaceIds
@@ -239,26 +253,30 @@ function PreferencesSummary({
   const dateValue =
     p.dateStart === p.dateEnd ? p.dateStart : `${p.dateStart} → ${p.dateEnd}`
 
+  const districtsLabel = p.districts.length
+    ? p.districts.map((d) => t(`tripWizard.districtNames.${d}` as any)).join('、')
+    : t('tripDetail.summary.anyDistrict')
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-        <Stat label="日期" value={dateValue} />
-        <Stat label="時段" value={`${p.startTime} – ${p.endTime}`} />
-        <Stat label="預算" value={`NT$ ${p.budget.toLocaleString()} / 日`} />
+        <Stat label={t('tripDetail.summary.date')} value={dateValue} />
+        <Stat label={t('tripDetail.summary.time')} value={`${p.startTime} – ${p.endTime}`} />
         <Stat
-          label="行政區"
-          value={p.districts.length ? p.districts.join('、') : '不限'}
+          label={t('tripDetail.summary.budget')}
+          value={t('tripDetail.summary.budgetValue', { amount: p.budget.toLocaleString() })}
         />
+        <Stat label={t('tripDetail.summary.districts')} value={districtsLabel} />
       </div>
 
       {tags.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {tags.map((t) => (
+          {tags.map((tg) => (
             <span
-              key={t}
+              key={tg}
               className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
             >
-              {t}
+              {tg}
             </span>
           ))}
         </div>
@@ -272,9 +290,11 @@ function PreferencesSummary({
 
       {mustVisitNames.length > 0 && (
         <p className="mt-2 text-[11px] text-slate-500">
-          必去：{mustVisitNames.join('、')}
+          {t('tripDetail.summary.mustVisit', { names: mustVisitNames.join('、') })}
           {p.mustVisitPlaceIds.length > mustVisitNames.length &&
-            ` 等 ${p.mustVisitPlaceIds.length} 個`}
+            ' ' + t('tripDetail.summary.mustVisitMore', {
+              count: p.mustVisitPlaceIds.length,
+            })}
         </p>
       )}
     </div>
