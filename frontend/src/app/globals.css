@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#__next {
+  height: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC',
+    'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.mapboxgl-popup-content {
+  border-radius: 0.5rem;
+}
+
+.wg-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  position: relative;
+}
+.wg-marker[data-selected='true'] {
+  transform: scale(1.5);
+  z-index: 5;
+}
+.wg-marker[data-kind='place'] {
+  width: 14px;
+  height: 14px;
+  background: #3b82f6;
+}
+.wg-marker[data-kind='recommendation'] {
+  width: 12px;
+  height: 12px;
+  background: #f59e0b;
+}
+.wg-marker[data-kind='recommendation']::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  border: 2px solid #f59e0b;
+  animation: pulse_ring 1.6s ease-out infinite;
+}
+.wg-marker .badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  border: 1.5px solid white;
+}
+.wg-marker .badge.legal {
+  background: #10b981;
+}
+.wg-marker .badge.illegal {
+  background: #ef4444;
+}
+.wg-marker .badge.unknown {
+  background: #9ca3af;
+}
+
+@keyframes pulse_ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.wg-popup .mapboxgl-popup-content {
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.55rem;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  max-width: 240px;
+}
+.wg-pop {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #0f172a;
+}
+.wg-pop-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.wg-pop-cat {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+}
+.wg-pop-addr {
+  margin-top: 4px;
+  color: #475569;
+}
+.wg-pop-desc {
+  margin-top: 4px;
+  color: #334155;
+}
+.wg-pop-reason {
+  margin-top: 6px;
+  color: #b45309;
+  font-style: italic;
+}
+.wg-pop-tags {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.wg-pop-tags span {
+  background: #f1f5f9;
+  color: #475569;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+.wg-pop-hotel {
+  margin-top: 6px;
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.wg-pop-hotel.legal {
+  background: #d1fae5;
+  color: #065f46;
+}
+.wg-pop-hotel.illegal {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.wg-pop-hotel.unknown {
+  background: #f1f5f9;
+  color: #475569;
+}

@@ -10,6 +10,18 @@ const CATEGORY_ICON: Record<Place['category'], string> = {
   hotel: '🏨',
 }
 
+const CATEGORY_BORDER: Record<Place['category'], string> = {
+  food: 'border-l-amber-500',
+  attraction: 'border-l-emerald-500',
+  hotel: 'border-l-violet-500',
+}
+
+const CATEGORY_TINT: Record<Place['category'], string> = {
+  food: 'bg-amber-50/40',
+  attraction: 'bg-emerald-50/40',
+  hotel: 'bg-violet-50/40',
+}
+
 const SOURCE_LABEL: Record<Place['source_type'], string> = {
   reels_url: 'Reels',
   image: '圖片',
@@ -36,8 +48,12 @@ export default function PlaceCard({
     <article
       onClick={onClick}
       className={clsx(
-        'group cursor-pointer rounded-lg border bg-white p-3 shadow-sm transition hover:border-blue-400',
-        isSelected ? 'border-l-4 border-l-blue-500 ring-1 ring-blue-100' : 'border-slate-200',
+        'group cursor-pointer rounded-lg border border-l-4 bg-white p-3 shadow-sm transition hover:shadow-md',
+        CATEGORY_BORDER[place.category],
+        CATEGORY_TINT[place.category],
+        isSelected
+          ? 'border-slate-300 ring-2 ring-blue-200'
+          : 'border-slate-200',
       )}
     >
       <header className="flex items-start justify-between gap-2">
