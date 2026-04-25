@@ -103,11 +103,8 @@ WEB_APP_URL=http://localhost:3000
 # Google Maps (M3 geocoding, M4 ingest)
 GOOGLE_MAPS_API_KEY=
 
-# Anthropic Claude (M2 vision, M5 reason, M7 itinerary)
-ANTHROPIC_API_KEY=
-
-# OpenAI (M1 + M3 + M5 embeddings)
-OPENAI_API_KEY=
+# Google Gemini (M2 vision, M5 reason, M7 itinerary, M1+M3+M5 embeddings)
+GEMINI_API_KEY=
 
 # Mapbox (M6)
 NEXT_PUBLIC_MAPBOX_TOKEN=
@@ -356,7 +353,6 @@ httpx==0.27.2
 numpy==1.26.4
 
 # M2
-anthropic==0.34.0
 yt-dlp==2024.9.27
 opencv-python-headless==4.10.0.84
 
@@ -366,8 +362,8 @@ line-bot-sdk==3.11.0
 # M4
 rapidfuzz==3.9.7
 
-# M1, M3, M5
-openai==1.45.0
+# M1, M2, M3, M5, M7 (Gemini: vision + reason + itinerary + embeddings)
+google-genai==0.8.0
 
 # M7
 apscheduler==3.10.4
@@ -414,7 +410,7 @@ shop    = mall, department_store, market
 """
 執行方式: python scripts/ingest_osm.py
 預期執行時間: 10–15 分鐘（含 embedding batch）
-需要環境變數: DATABASE_URL, OPENAI_API_KEY
+需要環境變數: DATABASE_URL, GEMINI_API_KEY
 """
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
@@ -469,9 +465,15 @@ async def fetch_osm_data() -> list[dict]:
     失敗 → 拋出 RuntimeError。
     """
 
-async def batch_embed(texts: list[str], client: AsyncOpenAI) -> list[list[float]]:
+async def batch_embed(texts: list[str], client: "genai.Client") -> list[list[float]]:
     """
-    每 100 筆一批打 OpenAI text-embedding-3-small。
+    每 100 筆一批打 Gemini embedding。
+
+    model: "gemini-embedding-001"
+    config: types.EmbedContentConfig(output_dimensionality=1536, task_type="RETRIEVAL_DOCUMENT")
+    呼叫: await client.aio.models.embed_content(model=..., contents=batch, config=...)
+    每筆 result.embeddings[i].values 即為 list[float]。
+
     每批之間 await asyncio.sleep(0.5)。
     回傳與 texts 等長的 embedding list。
     """
@@ -508,7 +510,7 @@ psql -c "SELECT category, COUNT(*) FROM attractions GROUP BY category;"
 
 ## M2: IG Reels 媒體管線
 
-> **依賴**: M0 (config, Anthropic API key)
+> **依賴**: M0 (config, Gemini API key)
 > **被依賴**: M3 呼叫 `process_reels_url()` 和 `process_image_bytes()`
 > **職責**: 給定 IG Reels URL → 回傳結構化地點資訊
 
@@ -591,8 +593,8 @@ def extract_keyframe(video_path: str, second: int = 3) -> str:
     8. 回傳 jpg_path
     """
 
-def image_to_base64(image_path: str) -> str:
-    """讀取 image_path，回傳 base64 encoded string。"""
+def read_image_bytes(image_path: str) -> bytes:
+    """讀取 image_path，回傳 raw bytes（直接餵給 Gemini Part.from_bytes）。"""
 ```
 
 ```python
@@ -621,16 +623,29 @@ USER_PROMPT_TEMPLATE = """
 - attraction: 景點、公園、商場、其他
 """
 
-async def vision_extract(image_base64: str, caption: str) -> dict:
+async def vision_extract(image_bytes: bytes, caption: str) -> dict:
     """
-    呼叫 claude-sonnet-4-20250514，messages 格式:
-    [{ "role": "user", "content": [
-        { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": image_base64 } },
-        { "type": "text", "text": USER_PROMPT_TEMPLATE.format(caption=caption) }
-    ]}]
+    呼叫 Gemini vision (gemini-2.5-flash)。
 
-    解析回應為 JSON dict。
-    若 JSON 解析失敗，回傳預設值:
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    response = await client.aio.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=[
+            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+            USER_PROMPT_TEMPLATE.format(caption=caption),
+        ],
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            response_mime_type="application/json",
+            temperature=0.2,
+        ),
+    )
+
+    json.loads(response.text) → dict
+    若 JSON 解析失敗或 response.text 為空，回傳預設值:
     { "name": "", "category": "attraction", "description": "", "address_hint": "", "confidence": 0.0 }
     """
 ```
@@ -643,8 +658,8 @@ async def process_reels_url(url: str) -> ExtractedContent:
     1. video_path, caption = await download_reels(url)
        DownloadError 直接往上拋，由 M3 catch
     2. frame_path = extract_keyframe(video_path, second=3)
-    3. b64 = image_to_base64(frame_path)
-    4. extracted = await vision_extract(b64, caption)
+    3. img_bytes = read_image_bytes(frame_path)
+    4. extracted = await vision_extract(img_bytes, caption)
     5. try/finally: os.remove(video_path), os.remove(frame_path)
        （無論成功失敗都清暫存檔）
     6. 回傳 ExtractedContent(**extracted, caption=caption)
@@ -652,9 +667,8 @@ async def process_reels_url(url: str) -> ExtractedContent:
 
 async def process_image_bytes(image_bytes: bytes) -> ExtractedContent:
     """
-    1. b64 = base64.b64encode(image_bytes).decode()
-    2. extracted = await vision_extract(b64, caption="")
-    3. 回傳 ExtractedContent(**extracted, caption="")
+    1. extracted = await vision_extract(image_bytes, caption="")
+    2. 回傳 ExtractedContent(**extracted, caption="")
     """
 ```
 
@@ -669,7 +683,7 @@ pytest tests/test_m2_media.py -v
 # test_vision_extract_mock           → mock Claude API，確認 JSON parsing 正確
 # test_vision_extract_fallback       → Claude 回非 JSON，回傳預設值
 # test_cleanup_on_failure            → vision_extract 拋出例外時，/tmp 暫存仍被清除
-# test_process_reels_url_integration → 給真實公開 IG URL，confidence > 0.5（需要 ANTHROPIC_API_KEY）
+# test_process_reels_url_integration → 給真實公開 IG URL，confidence > 0.5（需要 GEMINI_API_KEY）
 ```
 
 ---
@@ -812,18 +826,25 @@ class GeocodingError(Exception):
 ```python
 # app/services/embedder.py
 
-from openai import AsyncOpenAI
+from google import genai
+from google.genai import types
+
+# 全域 client（lazy init），讀 GEMINI_API_KEY
+# client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 async def embed(text: str) -> list[float]:
     """
-    model: text-embedding-3-small（1536 dim）
+    model: gemini-embedding-001
+    config: types.EmbedContentConfig(output_dimensionality=1536, task_type="RETRIEVAL_QUERY")
+    呼叫: await client.aio.models.embed_content(...)
+    取 result.embeddings[0].values。
     單筆，供 M3 即時使用。
     """
 
 async def embed_batch(texts: list[str]) -> list[list[float]]:
     """
-    每 100 筆一批，供 M1 ingest 使用。
-    每批 sleep(0.5)。
+    每 100 筆一批，task_type="RETRIEVAL_DOCUMENT"，output_dimensionality=1536。
+    每批 sleep(0.5)。供 M1 ingest 使用。
     """
 ```
 
@@ -987,7 +1008,7 @@ curl "localhost:8000/hotels/verify?name=阿貓阿狗非法民宿XYZ&lat=25.033&l
 
 - ✅ 讀取 `attractions` 做向量搜尋
 - ✅ 讀取 `places` 計算使用者偏好 centroid
-- ✅ 呼叫 Claude 生成推薦理由（claude-haiku，速度優先）
+- ✅ 呼叫 Gemini 生成推薦理由（gemini-2.5-flash，速度優先）
 - ❌ **不寫任何 table**
 - ❌ 不知道 Line Bot 的存在
 
@@ -1000,7 +1021,8 @@ curl "localhost:8000/hotels/verify?name=阿貓阿狗非法民宿XYZ&lat=25.033&l
 # app/services/rag/recommender.py
 
 import numpy as np
-from anthropic import AsyncAnthropic
+from google import genai
+from google.genai import types
 
 async def find_similar(
     session_id: str,
@@ -1026,11 +1048,17 @@ async def find_similar(
        LIMIT :limit
 
     4. 並行生成 reason（asyncio.gather）:
-       對每個 result，呼叫 Claude:
-         model: claude-haiku-4-5-20251001（速度快）
+       對每個 result，呼叫 Gemini:
+         model: gemini-2.5-flash（速度快）
+         呼叫: await client.aio.models.generate_content(
+                 model="gemini-2.5-flash",
+                 contents=prompt,
+                 config=types.GenerateContentConfig(temperature=0.4, max_output_tokens=64),
+               )
          prompt: f"使用者收藏過：{place_names_joined}。
                   請用繁體中文一句話（20字以內）說明為什麼推薦「{result['name']}」。
                   只輸出那一句話，不要標點以外的任何文字。"
+         取 response.text.strip()
 
     5. 回傳:
        [
@@ -1261,9 +1289,12 @@ async def generate(session_id: str, date: str, start_time: str = "09:00") -> dic
     2. 取推薦 attractions（各 category 各 2 筆，呼叫 M5 的 find_similar）
     3. 合併約 5–10 個地點
     4. 取今日天氣（CWB API，失敗則 weather=None）
-    5. 呼叫 claude-sonnet-4-20250514 生成行程
-
-    System: 你是台北旅遊規劃師。只回傳 JSON，不要任何說明。
+    5. 呼叫 Gemini (gemini-2.5-pro) 生成行程
+       config=types.GenerateContentConfig(
+         system_instruction="你是台北旅遊規劃師。只回傳 JSON，不要任何說明。",
+         response_mime_type="application/json",
+         temperature=0.5,
+       )
 
     User prompt 包含:
     - date, start_time

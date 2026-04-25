@@ -1,6 +1,7 @@
 """M1 + M3 + M5 共用 embedding 介面 (spec M3.3).
 
-模型: text-embedding-3-small (1536 dim)
+模型: gemini-embedding-001（output_dimensionality=1536，沿用 attractions/places 的 vector(1536) schema）
+SDK: google-genai
 """
 
 

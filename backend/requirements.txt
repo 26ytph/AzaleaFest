@@ -10,7 +10,6 @@ httpx==0.27.2
 numpy==1.26.4
 
 # M2
-anthropic==0.34.0
 yt-dlp==2024.9.27
 opencv-python-headless==4.10.0.84
 
@@ -20,8 +19,8 @@ line-bot-sdk==3.11.0
 # M4
 rapidfuzz==3.9.7
 
-# M1, M3, M5
-openai==1.45.0
+# M1, M2, M3, M5, M7 (Gemini: vision + reason + itinerary + embeddings)
+google-genai==0.8.0
 
 # M7
 apscheduler==3.10.4
