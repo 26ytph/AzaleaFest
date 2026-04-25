@@ -160,3 +160,28 @@ body {
   background: #f1f5f9;
   color: #475569;
 }
+
+.wg-trip-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  background: #3b82f6;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  border: 2px solid white;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.25);
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+.wg-trip-marker:hover {
+  transform: scale(1.1);
+}
+.wg-trip-marker[data-selected='true'] {
+  transform: scale(1.35);
+  background: #1d4ed8;
+  z-index: 5;
+}

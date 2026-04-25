@@ -15,7 +15,7 @@ yt-dlp==2024.9.27
 opencv-python-headless==4.10.0.84
 
 # M3
-line-bot-sdk==3.14.0
+line-bot-sdk==3.14.5
 
 # M4
 rapidfuzz==3.9.7

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import ItineraryTimeline from '@/components/ItineraryTimeline'
@@ -9,7 +10,18 @@ import { useTrip } from '@/hooks/useTrips'
 import { usePlaces } from '@/hooks/usePlaces'
 import { api, getSessionId } from '@/lib/api'
 import { tripsStore } from '@/lib/trips'
+import { mockRecommendations } from '@/lib/mock'
 import type { Itinerary } from '@/lib/types'
+import type { EnrichedStop } from '@/components/TripMap'
+
+const TripMap = dynamic(() => import('@/components/TripMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[420px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400">
+      載入地圖…
+    </div>
+  ),
+})
 
 export default function TripDetailPage() {
   const params = useParams<{ id: string }>()
@@ -19,12 +31,33 @@ export default function TripDetailPage() {
 
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
+  const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(null)
 
   useEffect(() => {
     setSessionId(getSessionId())
   }, [])
 
   const { places } = usePlaces(sessionId)
+
+  // Enrich stops with lat/lng by joining against the user's places + mock
+  // recommendations. In production the spec API would need to include coords
+  // (or expose a /attractions/:id endpoint) so we can drop the mock fallback.
+  const enrichedStops = useMemo<EnrichedStop[]>(() => {
+    if (!trip?.itinerary) return []
+    const placeMap = new Map(places.map((p) => [p.id, { lat: p.lat, lng: p.lng }]))
+    const recMap = new Map(
+      mockRecommendations.map((r) => [
+        r.attraction.id,
+        { lat: r.attraction.lat, lng: r.attraction.lng },
+      ]),
+    )
+    const out: EnrichedStop[] = []
+    for (const stop of trip.itinerary.stops) {
+      const coords = placeMap.get(stop.place_id) ?? recMap.get(stop.place_id)
+      if (coords) out.push({ ...stop, ...coords })
+    }
+    return out
+  }, [trip?.itinerary, places])
 
   if (!trip) {
     return (
@@ -115,12 +148,25 @@ export default function TripDetailPage() {
             placeNamesById={Object.fromEntries(places.map((p) => [p.id, p.name]))}
           />
 
+          {trip.itinerary && (
+            <TripMap
+              stops={enrichedStops}
+              selectedPlaceId={selectedPlaceId}
+              onSelectStop={(id) =>
+                setSelectedPlaceId((cur) => (cur === id ? null : id))
+              }
+            />
+          )}
+
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             {trip.itinerary ? (
               <ItineraryTimeline
                 itinerary={trip.itinerary}
                 editable
                 onChange={updateItinerary}
+                onSelectStop={(id) =>
+                  setSelectedPlaceId((cur) => (cur === id ? null : id))
+                }
               />
             ) : (
               <div className="py-12 text-center text-sm text-slate-500">
@@ -128,6 +174,13 @@ export default function TripDetailPage() {
               </div>
             )}
           </div>
+
+          {trip.itinerary && enrichedStops.length < trip.itinerary.stops.length && (
+            <p className="rounded bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+              地圖只顯示 {enrichedStops.length} / {trip.itinerary.stops.length} 站 —
+              其他站點還沒有座標（後端尚未在行程回傳 lat/lng）。
+            </p>
+          )}
         </section>
 
         <section className="lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)]">
