@@ -36,3 +36,6 @@ Thumbs.db
 /tmp/
 *.log
 .cache/
+
+# M1 attractions dump（本機 GPU 跑完後產出，上傳 HF dataset，不進 git）
+backend/data/dumps/

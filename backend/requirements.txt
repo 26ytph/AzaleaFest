@@ -26,6 +26,10 @@ google-genai==0.8.0
 # M1+M3+M5 共用 embedder：本機跑 sentence-transformer，避開 Gemini free-tier RPM 限制
 sentence-transformers==3.0.1
 
+# M1 dump bootstrap：從 Hugging Face dataset 拉預算好的 attractions embedding，
+# 讓隊友 docker 啟動時不必本機重 embed
+huggingface_hub==0.24.6
+
 # M7
 apscheduler==3.10.4
 

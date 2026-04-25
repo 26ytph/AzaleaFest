@@ -22,7 +22,8 @@ class Attraction(Base):
     description: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     osm_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
+    embedding_bgem3: Mapped[list[float] | None] = mapped_column(Vector(1024))
+    embedding_mpnet: Mapped[list[float] | None] = mapped_column(Vector(768))
     source: Mapped[str | None] = mapped_column(Text, default="osm")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

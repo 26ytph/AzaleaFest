@@ -1,4 +1,3 @@
-version: '3.9'
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -31,6 +30,9 @@ services:
     volumes:
       - /tmp:/tmp
       - ./secrets:/secrets:ro
+    # `up` 走這條（會跑 migration + bootstrap dump + uvicorn）；
+    # `run --rm backend python ...` 會用 args 覆蓋此 command，bootstrap 不會跑。
+    command: ["bash", "/app/scripts/start.sh"]
 
   frontend:
     build: ./frontend

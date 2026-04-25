@@ -4,14 +4,15 @@
     docker compose run --rm backend python scripts/ingest_osm.py
 
 兩階段設計:
-  Phase 1: Fetch Overpass → insert 所有 row（embedding=NULL）。
-           即使 Gemini 整個壞掉，POI 資料一定先進 DB，M2/M3/M4 不會被擋。
-  Phase 2: 查 embedding IS NULL 的 row，batch 過 Gemini，逐個更新。
-           單一 batch 失敗 → log 後 skip，下次 re-run 自動續做。
+  Phase 1: Fetch Overpass / 觀光署 / Wikidata → insert 所有 row（embedding=NULL）。
+           即使 embedder 整個壞掉，POI 資料一定先進 DB，M2/M3/M4 不會被擋。
+  Phase 2: 查任一 embedding 欄為 NULL 的 row，並行兩個 model（bge-m3 + mpnet）
+           batch 處理，逐個更新雙欄。單一 batch 失敗 → log 後 skip，下次 re-run 續做。
+  Phase 3 (收尾): 兩欄都填完後建 ivfflat index（pgvector 要在已有資料時建）。
 
 可隨時 Ctrl-C 中斷再 re-run，是 idempotent 的。
 
-需要環境變數: DATABASE_URL, GEMINI_API_KEY
+需要環境變數: DATABASE_URL（embedder 是本機 model，不需要 API key）
 """
 from __future__ import annotations
 
@@ -28,12 +29,12 @@ _BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.database import SessionLocal
 from app.models.attraction import Attraction
-from app.services.embedder import embed_batch
+from app.services.embedder import embed_batch_bgem3, embed_batch_mpnet
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
@@ -358,9 +359,18 @@ async def fetch_osm_data() -> list[dict]:
     raise RuntimeError(f"Overpass fetch failed: {last_err}") from last_err
 
 
-async def batch_embed(texts: list[str]) -> list[list[float]]:
-    """spec M1.2 在 script 內定義的批次入口，實際 forward 到共用 embedder。"""
-    return await embed_batch(texts)
+async def batch_embed_dual(
+    texts: list[str],
+) -> tuple[list[list[float]], list[list[float]]]:
+    """並行兩個 model 的 batch embedding。回傳 (bgem3_vecs, mpnet_vecs)。
+
+    GPU 端兩個 model 可在不同 stream 上同時跑；CPU 端 asyncio.gather + thread
+    各自 release GIL during inference，仍有約 1.3-1.5x 加速。
+    """
+    return await asyncio.gather(
+        embed_batch_bgem3(texts),
+        embed_batch_mpnet(texts),
+    )
 
 
 def _cleanup_tmp() -> None:
@@ -388,7 +398,7 @@ async def _insert_rows_no_embedding(rows: list[dict]) -> int:
 # ---------- Phase 2: backfill embeddings for rows where embedding IS NULL ----------
 
 async def _select_pending() -> list[dict]:
-    """挑出尚未 embed 的 row，組裝 embed input 需要的欄位。"""
+    """挑出尚未完全 embed 的 row（任一個 model 欄位 NULL 都算 pending）。"""
     async with SessionLocal() as session:
         result = await session.execute(
             select(
@@ -398,7 +408,12 @@ async def _select_pending() -> list[dict]:
                 Attraction.address,
                 Attraction.description,
                 Attraction.tags,
-            ).where(Attraction.embedding.is_(None))
+            ).where(
+                or_(
+                    Attraction.embedding_bgem3.is_(None),
+                    Attraction.embedding_mpnet.is_(None),
+                )
+            )
         )
         rows = []
         for r in result.all():
@@ -414,21 +429,52 @@ async def _select_pending() -> list[dict]:
 
 
 async def _count_embedded() -> int:
+    """兩欄都非 NULL 才算「已完整 embed」。"""
     async with SessionLocal() as session:
         result = await session.execute(
             select(func.count()).select_from(Attraction).where(
-                Attraction.embedding.is_not(None)
+                and_(
+                    Attraction.embedding_bgem3.is_not(None),
+                    Attraction.embedding_mpnet.is_not(None),
+                )
             )
         )
         return int(result.scalar_one())
 
 
-async def _update_embeddings(chunk: list[dict], vectors: list[list[float]]) -> None:
+async def _update_embeddings(
+    chunk: list[dict],
+    bge_vecs: list[list[float]],
+    mp_vecs: list[list[float]],
+) -> None:
     async with SessionLocal() as session:
-        for r, v in zip(chunk, vectors, strict=True):
+        for r, b, m in zip(chunk, bge_vecs, mp_vecs, strict=True):
             await session.execute(
-                update(Attraction).where(Attraction.id == r["id"]).values(embedding=v)
+                update(Attraction)
+                .where(Attraction.id == r["id"])
+                .values(embedding_bgem3=b, embedding_mpnet=m)
             )
+        await session.commit()
+
+
+async def _create_ivfflat_indexes() -> None:
+    """ingest 收尾時建 ivfflat index（pgvector 要在已有資料時建效果才好）。
+
+    `IF NOT EXISTS` 讓 re-run 安全。dump 時 pg_dump 會帶上索引定義；
+    隊友 pg_restore 自動拿到，不必各自重跑。
+    """
+    sqls = [
+        # ivfflat lists 100 ≈ sqrt(rows)，rows 在 10k-15k 區間時這個值合理
+        "CREATE INDEX IF NOT EXISTS attractions_embedding_bgem3_ivfflat "
+        "ON attractions USING ivfflat (embedding_bgem3 vector_cosine_ops) "
+        "WITH (lists = 100)",
+        "CREATE INDEX IF NOT EXISTS attractions_embedding_mpnet_ivfflat "
+        "ON attractions USING ivfflat (embedding_mpnet vector_cosine_ops) "
+        "WITH (lists = 100)",
+    ]
+    async with SessionLocal() as session:
+        for sql in sqls:
+            await session.execute(text(sql))
         await session.commit()
 
 
@@ -442,9 +488,9 @@ async def _backfill_embeddings(pending: list[dict]) -> tuple[int, int]:
 
     for batch_idx, i in enumerate(range(0, total, _EMBED_BATCH), start=1):
         chunk = pending[i : i + _EMBED_BATCH]
-        texts = [build_embed_text(r) for r in chunk]
+        embed_texts = [build_embed_text(r) for r in chunk]
         try:
-            vectors = await batch_embed(texts)
+            bge_vecs, mp_vecs = await batch_embed_dual(embed_texts)
         except Exception as e:
             consecutive_fails += 1
             skipped += len(chunk)
@@ -466,7 +512,7 @@ async def _backfill_embeddings(pending: list[dict]) -> tuple[int, int]:
             continue
 
         consecutive_fails = 0
-        await _update_embeddings(chunk, vectors)
+        await _update_embeddings(chunk, bge_vecs, mp_vecs)
         embedded += len(chunk)
         if batch_idx % 5 == 0 or batch_idx == total_batches:
             print(
@@ -571,7 +617,7 @@ async def ingest() -> None:
     else:
         print(
             f"Phase 2 | {len(pending)} rows need embedding "
-            f"(batch={_EMBED_BATCH}, may take a while due to free-tier rate limit)",
+            f"(batch={_EMBED_BATCH}, dual model: bge-m3 + mpnet)",
             flush=True,
         )
         embedded, skipped = await _backfill_embeddings(pending)
@@ -585,6 +631,10 @@ async def ingest() -> None:
     _cleanup_tmp()
 
     total_with_embedding = await _count_embedded()
+    # 全 embed 完成才建 ivfflat（pgvector 要在已有資料時建效果才好）
+    if total_with_embedding > 0:
+        await _create_ivfflat_indexes()
+        print("Indexes | ivfflat (bge-m3, mpnet) ready", flush=True)
     elapsed = int(time.monotonic() - t0)
     print(
         f"DONE | total_rows: {len(parsed)} | with_embedding: {total_with_embedding} "

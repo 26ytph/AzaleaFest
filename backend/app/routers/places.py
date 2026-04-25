@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Literal
@@ -17,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.models.place import Place
-from app.services.embedder import embed
+from app.services.embedder import embed_bgem3, embed_mpnet
 
 log = logging.getLogger(__name__)
 
@@ -81,10 +82,14 @@ async def create_place(
 ) -> Place:
     embed_text = f"{payload.name}。{payload.category}。{payload.description or ''}"
     try:
-        embedding = await embed(embed_text)
+        emb_bgem3, emb_mpnet = await asyncio.gather(
+            embed_bgem3(embed_text),
+            embed_mpnet(embed_text),
+        )
     except Exception:
-        log.exception("embed failed in POST /places; inserting without vector")
-        embedding = None
+        log.exception("embed failed in POST /places; inserting without vectors")
+        emb_bgem3 = None
+        emb_mpnet = None
 
     place = Place(
         user_session_id=payload.session_id,
@@ -96,7 +101,8 @@ async def create_place(
         description=payload.description,
         source_type=payload.source_type,
         source_url=payload.source_url,
-        embedding=embedding,
+        embedding_bgem3=emb_bgem3,
+        embedding_mpnet=emb_mpnet,
     )
     db.add(place)
     await db.commit()

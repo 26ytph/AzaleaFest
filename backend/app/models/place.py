@@ -35,7 +35,8 @@ class Place(Base):
     source_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     reels_caption: Mapped[str | None] = mapped_column(Text, nullable=True)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
+    embedding_bgem3: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
+    embedding_mpnet: Mapped[list[float] | None] = mapped_column(Vector(768), nullable=True)
     hotel_legal_status: Mapped[str | None] = mapped_column(Text, nullable=True)
     # FK to legal_hotels(id) is enforced at DB level by the alembic migration.
     # The ORM declaration is intentionally a plain Integer so M3 doesn't
