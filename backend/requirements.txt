@@ -20,8 +20,11 @@ line-bot-sdk==3.14.0
 # M4
 rapidfuzz==3.9.7
 
-# M1, M2, M3, M5, M7 (Gemini: vision + reason + itinerary + embeddings)
+# M1, M2, M3, M5, M7 (Gemini: vision + reason + itinerary)
 google-genai==0.8.0
+
+# M1+M3+M5 共用 embedder：本機跑 sentence-transformer，避開 Gemini free-tier RPM 限制
+sentence-transformers==3.0.1
 
 # M7
 apscheduler==3.10.4

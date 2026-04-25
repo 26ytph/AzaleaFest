@@ -1,0 +1,13 @@
+# Local-only overrides — auto-loaded by `docker compose`.
+# 目的：
+# 1. 在 container 內 DB host 必須是 service name `db`（.env 是給 host-based dev）
+# 2. 把 ./backend mount 到 /app，改 .py 後不用 rebuild image
+services:
+  backend:
+    environment:
+      DATABASE_URL: postgresql+asyncpg://user:password@db:5432/wanderguard
+    volumes:
+      - ./backend:/app
+      - /tmp:/tmp
+      # 本機 embedding model 的 HuggingFace 快取，避免 ephemeral container 每次重抓
+      - ./.cache/huggingface:/root/.cache/huggingface
