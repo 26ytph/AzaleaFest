@@ -116,6 +116,10 @@ CWB_API_KEY=
 
 # Redis
 REDIS_URL=redis://localhost:6379
+
+# M2: IG cookies for yt-dlp（未設定則匿名下載，IG 多半會 rate-limit；強烈建議用 burner 帳號）
+# 在 host 把 cookies.txt 放到 ./secrets/，docker-compose 會以唯讀掛到 /secrets
+IG_COOKIES_PATH=
 ```
 
 ### M0.3 資料庫 Schema（權威定義）
@@ -322,7 +326,8 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - /tmp:/tmp   # M2: yt-dlp 暫存
+      - /tmp:/tmp                 # M2: yt-dlp 暫存
+      - ./secrets:/secrets:ro     # M2: IG cookies (read-only mount)
 
   frontend:
     build: ./frontend
@@ -516,7 +521,7 @@ psql -c "SELECT category, COUNT(*) FROM attractions GROUP BY category;"
 
 ### M2 的職責邊界
 
-- ✅ 下載 Reels（yt-dlp）、提取 keyframe（OpenCV）、呼叫 Claude Vision
+- ✅ 下載 Reels（yt-dlp）、提取 keyframe（OpenCV）、呼叫 Gemini Vision
 - ✅ 回傳 `ExtractedContent` dataclass
 - ❌ **不寫任何 DB**（資料持久化是 M3 的責任）
 - ❌ **不處理 Line event**（那是 M3 的事）
@@ -561,15 +566,20 @@ async def download_reels(url: str) -> tuple[str, str]:
     用 yt-dlp 下載 IG Reels。
 
     ydl_opts = {
-        'format': 'best[height<=480]',
+        # 優先 480p 控制檔案大小；IG 不一定有此格式 → fallback 到 best
+        'format': 'best[height<=480]/best',
         'outtmpl': f'/tmp/{uuid4()}.%(ext)s',
         'quiet': True,
         'no_warnings': True,
+        # 若 settings.IG_COOKIES_PATH 有設定且檔案存在，加上 'cookiefile'
+        # 必要：IG 從 2024 起對未登入抓取做 rate-limit；公開貼文也常被擋
+        # cookies 檔需可寫（yt-dlp 會回寫 Set-Cookie），所以實作上把它複製到 /tmp 再餵給 yt-dlp
     }
 
     yt-dlp download() 是同步的，用 asyncio.to_thread() 包裝。
 
     回傳: (video_path: str, caption: str)
+    - video_path 用 ydl.prepare_filename(info) 取（outtmpl 的 %(ext)s 會被展開）
     - caption = info_dict.get('description', '')
     - 下載失敗 → 拋出 DownloadError(原始錯誤訊息)
     """
@@ -680,8 +690,8 @@ pytest tests/test_m2_media.py -v
 # 測試項目:
 # test_extract_keyframe_valid        → 給合法 mp4，產生 jpg，檔案存在
 # test_extract_keyframe_short_video  → 影片長度 < 3s，仍能取到 frame
-# test_vision_extract_mock           → mock Claude API，確認 JSON parsing 正確
-# test_vision_extract_fallback       → Claude 回非 JSON，回傳預設值
+# test_vision_extract_mock           → mock Gemini API，確認 JSON parsing 正確
+# test_vision_extract_fallback       → Gemini 回非 JSON，回傳預設值
 # test_cleanup_on_failure            → vision_extract 拋出例外時，/tmp 暫存仍被清除
 # test_process_reels_url_integration → 給真實公開 IG URL，confidence > 0.5（需要 GEMINI_API_KEY）
 ```

@@ -22,5 +22,9 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://localhost:6379"
 
+    # M2: optional cookies file path (Netscape format) for yt-dlp to bypass
+    # Instagram's anonymous-fetch rate limit. Empty → anonymous download.
+    IG_COOKIES_PATH: str = ""
+
 
 settings = Settings()

@@ -30,6 +30,7 @@ services:
         condition: service_healthy
     volumes:
       - /tmp:/tmp
+      - ./secrets:/secrets:ro
 
   frontend:
     build: ./frontend
