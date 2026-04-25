@@ -11,6 +11,14 @@ set -euo pipefail
 
 cd /app
 
+# Hot-patch: 舊 image 裝的是 line-bot-sdk 3.14.0（該 release 有 syntax bug），
+# requirements.txt 已 pin 3.14.5，但 image 還沒 rebuild。容器啟動時補裝。
+# rebuild image 後可移除這段。
+if ! python -c "import importlib.metadata; v=importlib.metadata.version('line-bot-sdk'); assert v == '3.14.5', v" 2>/dev/null; then
+  echo "[start] hot-patching line-bot-sdk -> 3.14.5"
+  pip install --quiet --upgrade 'line-bot-sdk==3.14.5'
+fi
+
 echo "[start] alembic upgrade head"
 alembic upgrade head
 

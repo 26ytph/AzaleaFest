@@ -31,7 +31,7 @@ from sqlalchemy import update
 from app.config import settings
 from app.database import SessionLocal
 from app.models.place import Place
-from app.services.embedder import embed
+from app.services.embedder import embed_bgem3, embed_mpnet
 from app.services.geocoding import GeocodingError, geocode
 from app.services.hotel.matcher import match_hotel
 from app.services.media import (
@@ -45,6 +45,13 @@ log = logging.getLogger(__name__)
 
 IG_URL_PATTERN = re.compile(
     r"https?://(www\.)?(instagram\.com|instagr\.am)/reel[s]?/[\w-]+"
+)
+
+# 純文字無語意上下文，但旅館類名稱通常含明顯關鍵字 → 直接判 hotel，
+# 後續會自動觸發 M4 合法性比對。命中不到才 fallback 到 attraction。
+_HOTEL_KEYWORD_RE = re.compile(
+    r"(大飯店|飯店|酒店|旅館|民宿|旅店|旅社|客棧|賓館|青旅|hotel|inn|hostel|motel|resort)",
+    re.IGNORECASE,
 )
 
 _CATEGORY_LABELS = {
@@ -143,9 +150,10 @@ async def handle_reels_url(
 async def handle_plain_text(
     text: str, reply_token: str, session_id: str, line_api: AsyncMessagingApi
 ) -> None:
+    category = "hotel" if _HOTEL_KEYWORD_RE.search(text) else "attraction"
     extracted = ExtractedContent(
         name=text,
-        category="attraction",  # 純文字無從判斷類型，預設景點
+        category=category,
         description="",
         address_hint="",
         caption="",
@@ -221,10 +229,14 @@ async def _persist_and_reply(
 
     embed_text = f"{extracted.name}。{extracted.category}。{extracted.description}"
     try:
-        embedding = await embed(embed_text)
+        emb_bgem3, emb_mpnet = await asyncio.gather(
+            embed_bgem3(embed_text),
+            embed_mpnet(embed_text),
+        )
     except Exception:
-        log.exception("embed failed; inserting without vector")
-        embedding = None
+        log.exception("embed failed; inserting without vectors")
+        emb_bgem3 = None
+        emb_mpnet = None
 
     place = Place(
         user_session_id=session_id,
@@ -237,7 +249,8 @@ async def _persist_and_reply(
         source_type=source_type,
         source_url=source_url,
         reels_caption=extracted.caption or None,
-        embedding=embedding,
+        embedding_bgem3=emb_bgem3,
+        embedding_mpnet=emb_mpnet,
         hotel_legal_status=None,
         hotel_match_id=None,
     )

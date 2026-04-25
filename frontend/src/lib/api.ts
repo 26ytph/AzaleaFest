@@ -22,6 +22,13 @@ const SESSION_STORAGE_KEY = 'wg_session_id'
 
 export function getSessionId(): string {
   if (typeof window === 'undefined') return 'ssr'
+  // 從 Line bot 訊息點進來的入口會帶 ?session=...，覆寫 localStorage 後讓
+  // 同一個 session_id 在 web / Line 兩端打通。
+  const fromUrl = new URLSearchParams(window.location.search).get('session')
+  if (fromUrl) {
+    window.localStorage.setItem(SESSION_STORAGE_KEY, fromUrl)
+    return fromUrl
+  }
   let id = window.localStorage.getItem(SESSION_STORAGE_KEY)
   if (!id) {
     id =

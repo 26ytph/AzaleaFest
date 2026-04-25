@@ -19,7 +19,7 @@ import logging
 from typing import Any
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -33,6 +33,10 @@ log = logging.getLogger(__name__)
 _PER_MODEL_TOP_K = 20
 # RRF 標準參數，文獻默契值
 _RRF_K = 60
+# pgvector ivfflat 預設 probes=1，搜尋只看一個 cluster；當 user 收藏 category 偏斜時
+# 容易完全 miss 掉目標 category（centroid 落在 attraction 區，搜 food 就會 0 筆）。
+# 50 在 lists=100 上是 recall ≥ 95% 的安全值，query 仍 < 100ms。
+_IVFFLAT_PROBES = 50
 # 推薦理由的 prompt 上下文：只放最近收藏的幾個 place 名（避免 prompt 過長）
 _REASON_CONTEXT_PLACES = 5
 _FALLBACK_REASON = "依你最近收藏的風格挑的"
@@ -84,7 +88,8 @@ async def _search_attractions(
     category: str,
     limit: int,
 ) -> list[dict]:
-    """單一 model 的 ANN 檢索。column 是 ORM 欄位（Vector 型別）。"""
+    """單一 model 的 ANN 檢索。column 是 ORM 欄位（Vector 型別）。
+    category='all' 表示不依 category 過濾。"""
     stmt = (
         select(
             Attraction.id,
@@ -97,11 +102,12 @@ async def _search_attractions(
             Attraction.tags,
             column.cosine_distance(centroid).label("distance"),
         )
-        .where(Attraction.category == category)
         .where(column.is_not(None))
         .order_by("distance")
         .limit(limit)
     )
+    if category != "all":
+        stmt = stmt.where(Attraction.category == category)
     result = await session.execute(stmt)
     return [
         {
@@ -173,6 +179,10 @@ async def find_similar(
     無 places、或 places 沒任何有效 embedding → 回 []。
     """
     async with SessionLocal() as session:
+        # SET LOCAL 只影響本 transaction；ANN 兩次都會用到
+        await session.execute(
+            text(f"SET LOCAL ivfflat.probes = {_IVFFLAT_PROBES}")
+        )
         places = await _load_session_places(session, session_id)
         if not places:
             return []

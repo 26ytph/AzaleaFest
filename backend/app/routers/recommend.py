@@ -14,7 +14,7 @@ from app.services.rag.recommender import find_similar
 
 router = APIRouter()
 
-Category = Literal["hotel", "food", "attraction"]
+Category = Literal["hotel", "food", "attraction", "all"]
 
 
 class RecommendRequest(BaseModel):
