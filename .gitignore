@@ -27,6 +27,7 @@ dist/
 .vscode/
 .idea/
 *.swp
+.claude/
 
 # OS
 .DS_Store

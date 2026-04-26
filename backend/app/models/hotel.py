@@ -24,6 +24,12 @@ class LegalHotel(Base):
     hotel_type: Mapped[str | None] = mapped_column(Text)
     source: Mapped[str | None] = mapped_column(Text)
     raw_data: Mapped[dict | None] = mapped_column(JSONB)
+    # Filled by scripts/regeocode_hotels_google.py via Google Places v1.
+    # Partial-unique index lives in alembic 0004; ORM-level unique=True is
+    # advisory (Postgres treats multiple NULLs as distinct anyway).
+    google_place_id: Mapped[str | None] = mapped_column(
+        Text, nullable=True, unique=True, index=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

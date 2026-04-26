@@ -1,24 +1,36 @@
-"""M4 匹配介面 — M3 import 的唯一入口 (spec M4.2).
+"""M4 hotel matcher — public entry imported by M3 (spec M4.2).
 
-Two-stage matching:
-  Stage 1 — 1km coord window + cutoff 75. Fast path; geographic proximity
-            acts as a sanity check, so a moderately fuzzy name match is OK.
-  Stage 2 — global search over all legal_hotels + cutoff 85. Catches the
-            case where geocoding mislocates the user's pin (Mapbox/Google
-            disagreement on a vague query like '福華大飯店' can be 1km+ off,
-            sliding the real match outside the 1km window). Stricter cutoff
-            because we no longer have geographic prior.
-  Stage 3 — illegal + 3 nearest legal hotels as alternatives.
+Flow (Google Places-driven):
+  1. Resolve the user's name to a specific Google place via
+     `google_resolver.resolve_hotel`. This replaces the legacy Stage-1
+     1km-window fuzz; the resolver gives us a canonical place_id and
+     trustworthy coordinates instead of relying on the user-supplied lat/lng.
+  2. If Google returns nothing → status="unknown" (no defensible verdict).
+  3. If the resolved place is not in Taipei City → status="unknown".
+     Crucially NOT illegal: legal_hotels only enumerates Taipei legal
+     hotels, so a non-Taipei hotel is simply out of scope.
+  4. Exact-match the resolved place_id against legal_hotels → status="legal".
+  5. Fallback to global rapidfuzz (WRatio cutoff 90) for rows that Google
+     hasn't been re-geocoded for yet, or chain-renames.
+  6. Otherwise status="illegal", with the 3 nearest legal hotels (by
+     resolved.lat/lng) as alternatives.
 
-We do not return 'unknown' in normal operation; that status is reserved for
-the defensive case where the legal_hotels table is empty.
+The signature keeps `lat` and `lng` for back-compat with the spec M0.4
+HTTP contract `GET /hotels/verify?name&lat&lng`. Both are now ignored
+internally — they are advisory hints only.
 """
+from __future__ import annotations
+
+import logging
 from dataclasses import dataclass, field
 
 from rapidfuzz import fuzz, process
 from sqlalchemy import text
 
 from app.database import SessionLocal
+from app.services.hotel.google_resolver import ResolvedPlace, resolve_hotel
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,44 +41,77 @@ class MatchResult:
     score: float = 0.0
 
 
-SCORE_THRESHOLD = 75               # Stage 1 (1km window) — token_sort_ratio
-# Stage 2 (whole DB) — uses fuzz.WRatio so substring patterns like
-# "君悅酒店" ⊂ "台北君悅酒店" hit 90 (token_sort_ratio gives only 80, missing
-# them). 90 also blocks chain false-positives like "台北福華" vs "台北美福" (86).
+# Single global cutoff for the fuzz fallback. WRatio handles substring
+# patterns ("君悅酒店" ⊂ "台北君悅酒店" → 90+) and blocks chain
+# false-positives like "台北福華" vs "台北美福" (~86).
 SCORE_THRESHOLD_GLOBAL = 90
-# WRatio 對 1-字查詢仍給 90（"君" 命中 "台北君悅酒店"）。最少 3 字才跑 Stage 2。
+# WRatio gives "君" ≥ 90 against "台北君悅酒店"; require ≥ 3 chars before
+# the global path runs, otherwise single-character noise matches.
 MIN_GLOBAL_QUERY_LEN = 3
 
-# 0.01° ≈ 1.1km. Trades off candidate count against geocoding error tolerance.
-COORD_WINDOW = 0.01
 
+async def match_hotel(
+    name: str, lat: float | None = None, lng: float | None = None
+) -> MatchResult:
+    """Hotel legality check (spec M4.2).
 
-async def match_hotel(name: str, lat: float, lng: float) -> MatchResult:
-    """Hotel legality check (spec M4.2)."""
+    `lat`/`lng` are accepted for HTTP-contract back-compat (spec M0.4) but
+    are not consulted; the matcher derives canonical coordinates from
+    Google Places via `resolve_hotel`.
+    """
+    resolved = await resolve_hotel(name)
+    if resolved is None:
+        return MatchResult(status="unknown", match=None)
+    if not resolved.in_taipei:
+        # Out of Taipei → not "illegal"; legal_hotels is a Taipei-only set.
+        return MatchResult(status="unknown", match=None)
+
     async with SessionLocal() as session:
-        # Stage 1: 1km window
-        nearby = await _fetch_near(session, lat, lng)
-        if nearby:
-            hit = _fuzz_pick(name, nearby, SCORE_THRESHOLD)
-            if hit is not None:
-                row, score = hit
-                return MatchResult(status="legal", match=row, score=score)
+        # Primary: place_id exact match. 100.0 is a synthetic confidence
+        # marker (rapidfuzz tops out at 100 too) so callers can treat
+        # this as "no fuzz involved".
+        hit = await _fetch_by_place_id(session, resolved.place_id)
+        if hit is not None:
+            return MatchResult(status="legal", match=hit, score=100.0)
 
-        # Stage 2: whole DB, stricter cutoff with WRatio
+        # Fallback: global fuzz. Catches rows whose google_place_id is
+        # still NULL (re-geocode missed them) or whose Google-canonical
+        # name doesn't match what we stored — e.g. for Sheraton, Google
+        # returns "Sheraton Grand Taipei Hotel" (English) but our DB row
+        # is "台北寒舍喜來登大飯店", which scripts <10 across.
+        # Solution: fuzz against BOTH the user's raw input and the Google-
+        # resolved name, keep whichever scores higher. The raw input is
+        # almost always Chinese (matching DB script) and is the strongest
+        # signal of what the user actually meant.
         all_rows = await _fetch_all(session)
         if not all_rows:
             return MatchResult(status="unknown", match=None)
 
+        queries = []
         if len(name.strip()) >= MIN_GLOBAL_QUERY_LEN:
-            hit = _fuzz_pick(
-                name, all_rows, SCORE_THRESHOLD_GLOBAL, scorer=fuzz.WRatio
-            )
-            if hit is not None:
-                row, score = hit
-                return MatchResult(status="legal", match=row, score=score)
+            queries.append(name.strip())
+        if (
+            len(resolved.name.strip()) >= MIN_GLOBAL_QUERY_LEN
+            and resolved.name.strip() != name.strip()
+        ):
+            queries.append(resolved.name.strip())
 
-        # Stage 3: illegal + 3 nearest legal hotels (concrete redirect targets)
-        alternatives = await _fetch_nearest(session, lat, lng, limit=3)
+        best_hit: tuple[dict, float] | None = None
+        for q in queries:
+            h = _fuzz_pick(
+                q, all_rows, SCORE_THRESHOLD_GLOBAL, scorer=fuzz.WRatio,
+            )
+            if h is None:
+                continue
+            if best_hit is None or h[1] > best_hit[1]:
+                best_hit = h
+        if best_hit is not None:
+            row, score = best_hit
+            return MatchResult(status="legal", match=row, score=score)
+
+        alternatives = await _fetch_nearest(
+            session, resolved.lat, resolved.lng, limit=3
+        )
         return MatchResult(
             status="illegal", match=None, alternatives=alternatives
         )
@@ -76,7 +121,7 @@ def _fuzz_pick(
     name: str,
     rows: list[dict],
     cutoff: int,
-    scorer=fuzz.token_sort_ratio,
+    scorer=fuzz.WRatio,
 ) -> tuple[dict, float] | None:
     """rapidfuzz best-match over rows; None if below cutoff."""
     choices = {r["id"]: r["name"] for r in rows}
@@ -90,17 +135,16 @@ def _fuzz_pick(
     return matched, float(score)
 
 
-async def _fetch_near(session, lat: float, lng: float) -> list[dict]:
+async def _fetch_by_place_id(session, place_id: str) -> dict | None:
     result = await session.execute(
         text(
             "SELECT id, name, address, lat, lng "
-            "FROM legal_hotels "
-            "WHERE lat IS NOT NULL AND lng IS NOT NULL "
-            "  AND ABS(lat - :lat) < :w AND ABS(lng - :lng) < :w"
+            "FROM legal_hotels WHERE google_place_id = :pid"
         ),
-        {"lat": lat, "lng": lng, "w": COORD_WINDOW},
+        {"pid": place_id},
     )
-    return [dict(r) for r in result.mappings().all()]
+    row = result.mappings().first()
+    return dict(row) if row else None
 
 
 async def _fetch_all(session) -> list[dict]:
@@ -125,3 +169,12 @@ async def _fetch_nearest(
         {"lat": lat, "lng": lng, "limit": limit},
     )
     return [dict(r) for r in result.mappings().all()]
+
+
+__all__ = [
+    "MatchResult",
+    "ResolvedPlace",
+    "SCORE_THRESHOLD_GLOBAL",
+    "MIN_GLOBAL_QUERY_LEN",
+    "match_hotel",
+]

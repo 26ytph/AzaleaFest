@@ -8,11 +8,12 @@ Required env (loaded from project-root .env if present):
 
 The CSV is produced by `scripts/fetch_hotels.py` and committed to the repo,
 so this script is fully offline and runs in seconds — no data.taipei or
-Nominatim calls happen here.
+geocoder calls happen here.
 
-Schema is owned by spec M0.3. Upsert is `ON CONFLICT (license_number) DO UPDATE
-SET updated_at = NOW()` per spec M4.1; rows without a license_number are
-inserted unconditionally.
+Upsert key: `(name, address)` UNIQUE constraint (alembic 0005). Re-runs
+preserve lat/lng/google_place_id values populated by
+scripts/regeocode_hotels_google.py — only metadata (hotel_type, source,
+raw_data, updated_at) is refreshed.
 """
 from __future__ import annotations
 
@@ -70,19 +71,27 @@ def load_csv(path: Path) -> list[dict]:
 async def upsert(
     conn: asyncpg.Connection, rows: list[dict]
 ) -> tuple[int, int]:
-    sql_with_license = """
+    """Single upsert path keyed on (name, address).
+
+    On conflict only metadata (license_number / hotel_type / source / raw_data
+    / updated_at) is refreshed. lat/lng/google_place_id are *not* touched —
+    those belong to the post-ingest Google re-geocode and would be expensive
+    to redo.
+    """
+    sql = """
         INSERT INTO legal_hotels
             (name, address, lat, lng, license_number,
              hotel_type, source, raw_data, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW())
-        ON CONFLICT (license_number) DO UPDATE SET updated_at = NOW()
+        ON CONFLICT (name, address) DO UPDATE SET
+            license_number = COALESCE(
+                legal_hotels.license_number, EXCLUDED.license_number
+            ),
+            hotel_type = EXCLUDED.hotel_type,
+            source     = EXCLUDED.source,
+            raw_data   = EXCLUDED.raw_data,
+            updated_at = NOW()
         RETURNING (xmax = 0) AS inserted
-    """
-    sql_no_license = """
-        INSERT INTO legal_hotels
-            (name, address, lat, lng, license_number,
-             hotel_type, source, raw_data, updated_at)
-        VALUES ($1, $2, $3, $4, NULL, $5, $6, $7::jsonb, NOW())
     """
     inserted = 0
     updated = 0
@@ -92,23 +101,15 @@ async def upsert(
             if r["raw_data"] is not None
             else None
         )
-        if r["license_number"]:
-            row = await conn.fetchrow(
-                sql_with_license,
-                r["name"], r["address"], r["lat"], r["lng"],
-                r["license_number"], r["hotel_type"], r["source"], raw,
-            )
-            if row and row["inserted"]:
-                inserted += 1
-            else:
-                updated += 1
-        else:
-            await conn.execute(
-                sql_no_license,
-                r["name"], r["address"], r["lat"], r["lng"],
-                r["hotel_type"], r["source"], raw,
-            )
+        row = await conn.fetchrow(
+            sql,
+            r["name"], r["address"], r["lat"], r["lng"],
+            r["license_number"], r["hotel_type"], r["source"], raw,
+        )
+        if row and row["inserted"]:
             inserted += 1
+        else:
+            updated += 1
     return inserted, updated
 
 

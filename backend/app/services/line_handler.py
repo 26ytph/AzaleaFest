@@ -281,7 +281,11 @@ async def _persist_and_reply(
 async def _verify_hotel_async(
     place_id: int, name: str, lat: float, lng: float
 ) -> None:
-    """呼叫 M4 比對，把結果寫回 places。任何例外只 log，不上拋。"""
+    """呼叫 M4 比對，把結果寫回 places。任何例外只 log，不上拋。
+
+    lat/lng 仍從 caller 傳入是為了 spec M0.4 的 HTTP contract 對稱，
+    但 matcher 內部走 Google Places resolver，不再消費這兩個值。
+    """
     try:
         result = await match_hotel(name, lat, lng)
     except NotImplementedError:

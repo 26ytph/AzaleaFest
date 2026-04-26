@@ -1,18 +1,27 @@
 """M4 unit tests.
 
-Integration coverage (DB + real data) lives in spec M4.4 acceptance curls;
-this file covers the parts we can verify without a running Postgres or network.
+Integration coverage (DB + real Google Places) lives in spec M4.4 acceptance
+curls; this file covers everything we can verify without a running Postgres
+or live network.
 """
 import sys
 from pathlib import Path
 
+import httpx
 import pytest
-from rapidfuzz import fuzz, process
 
+from app.config import settings
 from app.services.hotel import match_hotel as exported_match_hotel
+from app.services.hotel import google_resolver
+from app.services.hotel.google_resolver import (
+    ResolvedPlace,
+    is_in_taipei,
+    resolve_hotel,
+)
+from app.services.hotel import matcher as matcher_mod
 from app.services.hotel.matcher import (
     MatchResult,
-    SCORE_THRESHOLD,
+    SCORE_THRESHOLD_GLOBAL,
     match_hotel,
 )
 
@@ -22,10 +31,10 @@ import fetch_hotels  # noqa: E402
 import ingest_hotels  # noqa: E402
 
 
-# ---------- matcher ----------
+# ---------- matcher constants & exports ----------
 
-def test_score_threshold_is_75():
-    assert SCORE_THRESHOLD == 75
+def test_score_threshold_global_is_90():
+    assert SCORE_THRESHOLD_GLOBAL == 90
 
 
 def test_match_result_defaults():
@@ -38,65 +47,425 @@ def test_public_export_points_to_matcher():
     assert exported_match_hotel is match_hotel
 
 
-def test_rapidfuzz_finds_legal_hotel_above_threshold():
-    """Sanity check: the scorer wired in matcher actually clears 75
-    on a realistic Chinese-name partial match."""
-    choices = {1: "台北君悅酒店", 2: "台北晶華酒店", 3: "圓山大飯店"}
-    hit = process.extractOne(
-        query="君悅酒店",
-        choices=choices,
-        scorer=fuzz.token_sort_ratio,
-        score_cutoff=SCORE_THRESHOLD,
-    )
-    assert hit is not None
-    _, score, key = hit
-    assert key == 1
-    assert score >= SCORE_THRESHOLD
+@pytest.mark.asyncio
+async def test_match_hotel_signature_is_async_callable():
+    import inspect
+
+    assert callable(match_hotel)
+    assert inspect.iscoroutinefunction(match_hotel)
+    sig = inspect.signature(match_hotel)
+    # lat/lng accepted for HTTP-contract back-compat (spec M0.4) but optional.
+    assert sig.parameters["lat"].default is None
+    assert sig.parameters["lng"].default is None
 
 
-def test_rapidfuzz_rejects_unrelated_name():
-    choices = {1: "台北君悅酒店", 2: "圓山大飯店"}
-    hit = process.extractOne(
-        query="阿貓阿狗非法民宿XYZ",
-        choices=choices,
-        scorer=fuzz.token_sort_ratio,
-        score_cutoff=SCORE_THRESHOLD,
-    )
-    assert hit is None
+# ---------- google_resolver: is_in_taipei ----------
+
+def _admin_component(long_text: str, short_text: str | None = None) -> dict:
+    return {
+        "longText": long_text,
+        "shortText": short_text or long_text,
+        "types": ["administrative_area_level_1", "political"],
+    }
+
+
+def test_is_in_taipei_admin_component_matches_taipei():
+    place = {
+        "addressComponents": [_admin_component("臺北市")],
+        "location": {"latitude": 25.0, "longitude": 121.5},
+    }
+    assert is_in_taipei(place) is True
+
+
+def test_is_in_taipei_admin_component_matches_alt_form():
+    # Google sometimes returns "Taipei City" (English) under regionCode=tw.
+    place = {
+        "addressComponents": [_admin_component("Taipei City", "Taipei")],
+        "location": {"latitude": 25.04, "longitude": 121.56},
+    }
+    assert is_in_taipei(place) is True
+
+
+def test_is_in_taipei_admin_component_says_new_taipei_returns_false():
+    """Authoritative admin signal must NOT fall through to bbox.
+
+    A New Taipei address near the Taipei border (e.g. 永和) sits inside
+    the bbox but isn't legally in Taipei City — admin-1 is the trump card.
+    """
+    place = {
+        "addressComponents": [_admin_component("新北市")],
+        "location": {"latitude": 25.0, "longitude": 121.51},
+    }
+    assert is_in_taipei(place) is False
+
+
+def test_is_in_taipei_bbox_fallback_when_no_admin_component():
+    place = {
+        "addressComponents": [],
+        "location": {"latitude": 25.04, "longitude": 121.56},
+    }
+    assert is_in_taipei(place) is True
+
+
+def test_is_in_taipei_bbox_fallback_outside_box_returns_false():
+    place = {
+        "addressComponents": [],
+        "location": {"latitude": 23.86, "longitude": 120.91},  # 日月潭
+    }
+    assert is_in_taipei(place) is False
+
+
+def test_is_in_taipei_no_location_returns_false():
+    assert is_in_taipei({"addressComponents": []}) is False
+
+
+# ---------- google_resolver: resolve_hotel ----------
+
+def _places_payload(
+    *, place_id: str, name: str, lat: float, lng: float,
+    admin_long: str = "臺北市", formatted: str = "",
+) -> dict:
+    return {
+        "places": [
+            {
+                "id": place_id,
+                "displayName": {"text": name, "languageCode": "zh-TW"},
+                "formattedAddress": formatted or f"{admin_long}{name}",
+                "location": {"latitude": lat, "longitude": lng},
+                "addressComponents": [_admin_component(admin_long)],
+                "types": ["lodging"],
+            }
+        ]
+    }
+
+
+def _mock_client(
+    payload: dict | list, status_code: int = 200
+) -> httpx.AsyncClient:
+    """Build an httpx.AsyncClient backed by a MockTransport returning payload.
+
+    Pass a list of payloads to script multiple successive requests.
+    """
+    queue = list(payload) if isinstance(payload, list) else [payload]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = queue.pop(0) if queue else {}
+        return httpx.Response(status_code, json=body)
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
 @pytest.mark.asyncio
-async def test_match_hotel_signature_is_async_callable():
-    assert callable(match_hotel)
-    import inspect
+async def test_resolve_hotel_returns_place_id_and_components(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_MAPS_API_KEY", "fake-key")
+    payload = _places_payload(
+        place_id="ChIJabc123",
+        name="台北君悅酒店",
+        lat=25.0339,
+        lng=121.5645,
+    )
+    async with _mock_client(payload) as client:
+        result = await resolve_hotel("台北君悅酒店", client=client)
+    assert result is not None
+    assert result.place_id == "ChIJabc123"
+    assert result.name == "台北君悅酒店"
+    assert result.lat == pytest.approx(25.0339)
+    assert result.lng == pytest.approx(121.5645)
+    assert result.in_taipei is True
 
-    assert inspect.iscoroutinefunction(match_hotel)
+
+@pytest.mark.asyncio
+async def test_resolve_hotel_returns_none_on_empty_places(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_MAPS_API_KEY", "fake-key")
+    async with _mock_client({"places": []}) as client:
+        assert await resolve_hotel("不存在ZZZZ", client=client) is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_hotel_returns_none_when_api_key_missing(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_MAPS_API_KEY", "")
+
+    class ExplodingClient:
+        async def post(self, *_a, **_kw):  # pragma: no cover
+            raise AssertionError("must not call HTTP without API key")
+
+    assert await resolve_hotel("anything", client=ExplodingClient()) is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_hotel_swallows_http_errors(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_MAPS_API_KEY", "fake-key")
+
+    def handler(_req: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "boom"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
+        assert await resolve_hotel("anywhere", client=c) is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_hotel_marks_outside_taipei(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_MAPS_API_KEY", "fake-key")
+    payload = _places_payload(
+        place_id="ChIJoutside",
+        name="日月潭涵碧樓",
+        lat=23.86, lng=120.91,
+        admin_long="南投縣",
+    )
+    async with _mock_client(payload) as client:
+        result = await resolve_hotel("日月潭涵碧樓", client=client)
+    assert result is not None
+    assert result.in_taipei is False
+
+
+# ---------- matcher: full flow with mocked resolver + DB ----------
+
+class _FakeSession:
+    """Stub satisfying `async with SessionLocal() as session:` in matcher.py.
+
+    The matcher only passes the session through to the four `_fetch_*`
+    helpers, all of which we monkeypatch — so the session value is never
+    actually used. We just need an async context manager to enter cleanly.
+    """
+
+    async def __aenter__(self) -> "_FakeSession":
+        return self
+
+    async def __aexit__(self, *exc) -> bool:
+        return False
+
+
+def _fake_session_local():
+    return _FakeSession()
+
+
+def _resolved(in_taipei: bool = True, place_id: str = "PID-X",
+              name: str = "台北君悅酒店",
+              lat: float = 25.03, lng: float = 121.56) -> ResolvedPlace:
+    return ResolvedPlace(
+        place_id=place_id, name=name, lat=lat, lng=lng,
+        formatted_address=f"台北市信義區 {name}", in_taipei=in_taipei,
+    )
+
+
+@pytest.fixture
+def patched_session(monkeypatch):
+    monkeypatch.setattr(matcher_mod, "SessionLocal", _fake_session_local)
+
+
+@pytest.mark.asyncio
+async def test_match_hotel_resolver_miss_returns_unknown(
+    monkeypatch, patched_session
+):
+    async def fake_resolve(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(matcher_mod, "resolve_hotel", fake_resolve)
+    result = await match_hotel("ZZZZ不存在")
+    assert result.status == "unknown"
+    assert result.match is None
+    assert result.alternatives == []
+
+
+@pytest.mark.asyncio
+async def test_match_hotel_outside_taipei_returns_unknown_not_illegal(
+    monkeypatch, patched_session
+):
+    """Regression guard for requirement #3: non-Taipei resolution must
+    NEVER produce status='illegal'."""
+
+    async def fake_resolve(*_a, **_kw):
+        return _resolved(in_taipei=False, place_id="PID-NANTOU",
+                         name="日月潭涵碧樓", lat=23.86, lng=120.91)
+
+    async def boom(*_a, **_kw):  # pragma: no cover
+        raise AssertionError("DB must not be queried for non-Taipei")
+
+    monkeypatch.setattr(matcher_mod, "resolve_hotel", fake_resolve)
+    monkeypatch.setattr(matcher_mod, "_fetch_by_place_id", boom)
+    monkeypatch.setattr(matcher_mod, "_fetch_all", boom)
+    monkeypatch.setattr(matcher_mod, "_fetch_nearest", boom)
+
+    result = await match_hotel("日月潭涵碧樓")
+    assert result.status == "unknown"
+    assert result.status != "illegal"
+    assert result.match is None
+    assert result.alternatives == []
+
+
+@pytest.mark.asyncio
+async def test_match_hotel_place_id_hit_returns_legal(
+    monkeypatch, patched_session
+):
+    resolved = _resolved(place_id="PID-HYATT")
+
+    async def fake_resolve(*_a, **_kw):
+        return resolved
+
+    async def fake_by_pid(_session, pid):
+        assert pid == "PID-HYATT"
+        return {"id": 42, "name": "台北君悅酒店",
+                "address": "台北市信義區松壽路2號",
+                "lat": 25.0339, "lng": 121.5645}
+
+    monkeypatch.setattr(matcher_mod, "resolve_hotel", fake_resolve)
+    monkeypatch.setattr(matcher_mod, "_fetch_by_place_id", fake_by_pid)
+
+    result = await match_hotel("台北君悅酒店")
+    assert result.status == "legal"
+    assert result.score == 100.0
+    assert result.match is not None
+    assert result.match["id"] == 42
+
+
+@pytest.mark.asyncio
+async def test_match_hotel_falls_back_to_fuzz_when_place_id_misses(
+    monkeypatch, patched_session
+):
+    resolved = _resolved(place_id="PID-NEW")
+
+    async def fake_resolve(*_a, **_kw):
+        return resolved
+
+    async def fake_by_pid(*_a, **_kw):
+        return None  # place_id miss
+
+    async def fake_all(_session):
+        return [
+            {"id": 1, "name": "台北君悅酒店",
+             "address": "信義區", "lat": 25.0, "lng": 121.5},
+            {"id": 2, "name": "圓山大飯店",
+             "address": "中山區", "lat": 25.07, "lng": 121.52},
+        ]
+
+    monkeypatch.setattr(matcher_mod, "resolve_hotel", fake_resolve)
+    monkeypatch.setattr(matcher_mod, "_fetch_by_place_id", fake_by_pid)
+    monkeypatch.setattr(matcher_mod, "_fetch_all", fake_all)
+
+    result = await match_hotel("台北君悅酒店")
+    assert result.status == "legal"
+    assert result.match is not None
+    assert result.match["id"] == 1
+    assert result.score >= SCORE_THRESHOLD_GLOBAL
+
+
+@pytest.mark.asyncio
+async def test_match_hotel_falls_back_on_user_input_when_resolved_name_is_english(
+    monkeypatch, patched_session
+):
+    """Google's v1 :searchText sometimes returns an English displayName
+    even with regionCode=tw (Sheraton, Caesar Park, etc.). When the
+    DB row's google_place_id doesn't match the resolved place_id, the
+    fuzz fallback against the English name fails — but the user's
+    original Chinese input still matches the Chinese DB name. This is
+    the regression case behind '輸入喜來登大飯店出現非法日租'."""
+
+    resolved = ResolvedPlace(
+        place_id="ChIJ-google-other-listing",
+        name="Sheraton Grand Taipei Hotel",  # English from Google
+        lat=25.0446, lng=121.5220,
+        formatted_address="100臺北市中正區忠孝東路一段12號",
+        in_taipei=True,
+    )
+
+    async def fake_resolve(*_a, **_kw):
+        return resolved
+
+    async def fake_by_pid(*_a, **_kw):
+        return None  # DB has a different place_id for the same hotel
+
+    async def fake_all(_session):
+        return [
+            {"id": 100, "name": "台北寒舍喜來登大飯店",
+             "address": "臺北市中正區忠孝東路1段12號",
+             "lat": 25.04, "lng": 121.52},
+            {"id": 200, "name": "圓山大飯店",
+             "address": "中山區", "lat": 25.07, "lng": 121.52},
+        ]
+
+    monkeypatch.setattr(matcher_mod, "resolve_hotel", fake_resolve)
+    monkeypatch.setattr(matcher_mod, "_fetch_by_place_id", fake_by_pid)
+    monkeypatch.setattr(matcher_mod, "_fetch_all", fake_all)
+
+    result = await match_hotel("喜來登大飯店")
+    assert result.status == "legal", (
+        f"expected legal via user-input fuzz, got {result.status}"
+    )
+    assert result.match is not None
+    assert result.match["id"] == 100
+    assert result.score >= SCORE_THRESHOLD_GLOBAL
+
+
+@pytest.mark.asyncio
+async def test_match_hotel_illegal_uses_resolved_coords_for_alternatives(
+    monkeypatch, patched_session
+):
+    resolved = _resolved(place_id="PID-FAKE",
+                         name="阿貓阿狗非法民宿XYZ",
+                         lat=25.04, lng=121.56)
+
+    async def fake_resolve(*_a, **_kw):
+        return resolved
+
+    async def fake_by_pid(*_a, **_kw):
+        return None
+
+    async def fake_all(_session):
+        return [
+            {"id": 7, "name": "台北君悅酒店",
+             "address": "信義區", "lat": 25.0, "lng": 121.5},
+        ]
+
+    captured: dict = {}
+
+    async def fake_nearest(_session, lat, lng, limit):
+        captured["lat"] = lat
+        captured["lng"] = lng
+        captured["limit"] = limit
+        return [
+            {"id": 7, "name": "台北君悅酒店", "address": "信義區",
+             "lat": 25.0, "lng": 121.5},
+        ]
+
+    monkeypatch.setattr(matcher_mod, "resolve_hotel", fake_resolve)
+    monkeypatch.setattr(matcher_mod, "_fetch_by_place_id", fake_by_pid)
+    monkeypatch.setattr(matcher_mod, "_fetch_all", fake_all)
+    monkeypatch.setattr(matcher_mod, "_fetch_nearest", fake_nearest)
+
+    result = await match_hotel("阿貓阿狗非法民宿XYZ")
+    assert result.status == "illegal"
+    assert result.match is None
+    assert len(result.alternatives) == 1
+    assert captured["lat"] == pytest.approx(25.04)
+    assert captured["lng"] == pytest.approx(121.56)
+    assert captured["limit"] == 3
+
+
+@pytest.mark.asyncio
+async def test_match_hotel_unknown_when_db_empty(
+    monkeypatch, patched_session
+):
+    """Defensive: legal_hotels emptied → can't say legal/illegal."""
+    resolved = _resolved(place_id="PID-X")
+
+    async def fake_resolve(*_a, **_kw):
+        return resolved
+
+    async def fake_by_pid(*_a, **_kw):
+        return None
+
+    async def fake_all(_session):
+        return []
+
+    monkeypatch.setattr(matcher_mod, "resolve_hotel", fake_resolve)
+    monkeypatch.setattr(matcher_mod, "_fetch_by_place_id", fake_by_pid)
+    monkeypatch.setattr(matcher_mod, "_fetch_all", fake_all)
+
+    result = await match_hotel("台北君悅酒店")
+    assert result.status == "unknown"
 
 
 # ---------- fetch_hotels normalizers ----------
-
-def test_normalize_general_hotels_happy_path():
-    record = {
-        "_id": 1,
-        "縣市代碼": "63",
-        "專用標識編號": "HOTEL-001",
-        "旅館名稱": "台北君悅酒店",
-        "電話或手機號碼": "02-12345678",
-        "營業地址": "台北市信義區松壽路2號",
-        "客房最低定價": "3000",
-        "客房最高定價": "20000",
-        "房間數": "850",
-    }
-    n = fetch_hotels.normalize_general_hotels(record)
-    assert n is not None
-    assert n["name"] == "台北君悅酒店"
-    assert n["address"] == "台北市信義區松壽路2號"
-    assert n["license_number"] == "HOTEL-001"
-    assert n["hotel_type"] is None
-    assert n["lat"] is None and n["lng"] is None
-    assert n["source"] == "一般旅館"
-    assert n["raw_data"] is record
-
 
 def test_normalize_travel_hotels_happy_path():
     record = {
@@ -121,21 +490,6 @@ def test_normalize_travel_hotels_happy_path():
     "record",
     [
         {},
-        {"旅館名稱": "X"},                      # missing address
-        {"營業地址": "台北市..."},               # missing name
-        {"旅館名稱": "  ", "營業地址": "  "},    # whitespace-only
-        {"旅館名稱": None, "營業地址": None},
-        {"電話或手機號碼": "02-1234"},           # only an unrelated field
-    ],
-)
-def test_normalize_general_hotels_skips_invalid(record):
-    assert fetch_hotels.normalize_general_hotels(record) is None
-
-
-@pytest.mark.parametrize(
-    "record",
-    [
-        {},
         {"旅宿名稱": "X"},
         {"地址": "台北市..."},
         {"旅宿名稱": "  ", "地址": "  "},
@@ -146,29 +500,27 @@ def test_normalize_travel_hotels_skips_invalid(record):
     assert fetch_hotels.normalize_travel_hotels(record) is None
 
 
-def test_normalize_does_not_raise_on_unexpected_keys():
-    """Extra/unknown columns must not break normalization."""
+def test_normalize_travel_hotels_does_not_raise_on_unexpected_keys():
     record = {
-        "旅館名稱": "Foo",
-        "營業地址": "Bar",
+        "旅宿名稱": "Foo",
+        "地址": "Bar",
         "未來新增欄位_xyz": "whatever",
     }
-    assert fetch_hotels.normalize_general_hotels(record) is not None
+    assert fetch_hotels.normalize_travel_hotels(record) is not None
 
 
-def test_datasets_registry_uses_correct_normalizers():
-    by_rid = {rid: (label, fn) for rid, label, fn in fetch_hotels.DATASETS}
-    assert by_rid["3cea29db-66b1-4ab5-886c-4cafd3e1dcbc"] == (
-        "一般旅館",
-        fetch_hotels.normalize_general_hotels,
-    )
-    assert by_rid["adb6f5a6-3541-479a-bb32-d5be17eaa95b"] == (
-        "旅遊網住宿",
-        fetch_hotels.normalize_travel_hotels,
-    )
+def test_datasets_registry_is_travel_hotels_only():
+    """臺北市一般旅館 dropped — 旅遊網住宿 is a superset, ~619 rows total."""
+    assert len(fetch_hotels.DATASETS) == 1
+    rid, label, fn = fetch_hotels.DATASETS[0]
+    assert rid == "adb6f5a6-3541-479a-bb32-d5be17eaa95b"
+    assert label == "旅遊網住宿"
+    assert fn is fetch_hotels.normalize_travel_hotels
+    # Sanity: the old normalize_general_hotels is gone.
+    assert not hasattr(fetch_hotels, "normalize_general_hotels")
 
 
-# ---------- CSV roundtrip (fetch_hotels.write_csv ↔ load_cache / ingest.load_csv) ----------
+# ---------- CSV roundtrip (fetch_hotels.write_csv ↔ ingest.load_csv) ----------
 
 @pytest.fixture
 def sample_rows():
@@ -186,7 +538,9 @@ def sample_rows():
         {
             "name": "台北晶華酒店",
             "address": "台北市中山區中山北路二段39巷3號",
-            "lat": None,  # geocoding may fail — must round-trip cleanly
+            # lat/lng now empty by default — Google re-geocode fills them
+            # post-ingest. Roundtrip must still survive None.
+            "lat": None,
             "lng": None,
             "license_number": None,
             "hotel_type": "一般旅館",
@@ -259,6 +613,12 @@ def test_csv_output_is_sorted_deterministically(tmp_path):
     assert lines[2].startswith("B,addr-b")
 
 
+def test_fetch_hotels_no_longer_exposes_mapbox():
+    """Mapbox is gone — guard against accidental re-introduction."""
+    assert not hasattr(fetch_hotels, "mapbox_geocode")
+    assert not hasattr(fetch_hotels, "MAPBOX_TOKEN")
+
+
 # ---------- ingest helpers ----------
 
 def test_to_asyncpg_dsn_strips_sqlalchemy_prefix():
@@ -272,62 +632,5 @@ def test_to_asyncpg_dsn_strips_sqlalchemy_prefix():
     )
 
 
-# ---------- Mapbox response parsing ----------
-
-@pytest.mark.asyncio
-async def test_mapbox_geocode_parses_geojson_coords(monkeypatch):
-    """Mapbox returns [lng, lat]; mapbox_geocode must flip to (lat, lng)."""
-    monkeypatch.setattr(fetch_hotels, "MAPBOX_TOKEN", "fake-token")
-
-    class FakeResp:
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {
-                "features": [
-                    {"geometry": {
-                        "type": "Point",
-                        "coordinates": [121.5654177, 25.0329694],
-                    }}
-                ]
-            }
-
-    class FakeClient:
-        async def get(self, *args, **kwargs):
-            return FakeResp()
-
-    lat, lng = await fetch_hotels.mapbox_geocode(FakeClient(), "台北101")
-    assert lat == pytest.approx(25.0329694)
-    assert lng == pytest.approx(121.5654177)
-
-
-@pytest.mark.asyncio
-async def test_mapbox_geocode_handles_empty_features(monkeypatch):
-    monkeypatch.setattr(fetch_hotels, "MAPBOX_TOKEN", "fake-token")
-
-    class FakeResp:
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"features": []}
-
-    class FakeClient:
-        async def get(self, *args, **kwargs):
-            return FakeResp()
-
-    lat, lng = await fetch_hotels.mapbox_geocode(FakeClient(), "nonexistent")
-    assert lat is None and lng is None
-
-
-@pytest.mark.asyncio
-async def test_mapbox_geocode_returns_none_when_token_missing(monkeypatch):
-    monkeypatch.setattr(fetch_hotels, "MAPBOX_TOKEN", "")
-
-    class FakeClient:
-        async def get(self, *args, **kwargs):
-            raise AssertionError("must not call HTTP without token")
-
-    lat, lng = await fetch_hotels.mapbox_geocode(FakeClient(), "anything")
-    assert lat is None and lng is None
+# Silence unused-import warning; google_resolver imported for symbol presence.
+assert google_resolver is not None
