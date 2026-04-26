@@ -11,7 +11,6 @@ import { useTrip } from '@/hooks/useTrips'
 import { usePlaces } from '@/hooks/usePlaces'
 import { api, getSessionId } from '@/lib/api'
 import { tripsStore } from '@/lib/trips'
-import { mockRecommendations } from '@/lib/mock'
 import type { Itinerary } from '@/lib/types'
 import type { EnrichedStop } from '@/components/TripMap'
 
@@ -43,20 +42,14 @@ export default function TripDetailPage() {
 
   const enrichedStops = useMemo<EnrichedStop[]>(() => {
     if (!trip?.itinerary) return []
-    const placeMap = new Map(places.map((p) => [p.id, { lat: p.lat, lng: p.lng }]))
-    const recMap = new Map(
-      mockRecommendations.map((r) => [
-        r.attraction.id,
-        { lat: r.attraction.lat, lng: r.attraction.lng },
-      ]),
-    )
     const out: EnrichedStop[] = []
     for (const stop of trip.itinerary.stops) {
-      const coords = placeMap.get(stop.place_id) ?? recMap.get(stop.place_id)
-      if (coords) out.push({ ...stop, ...coords })
+      if (typeof stop.lat === 'number' && typeof stop.lng === 'number') {
+        out.push({ ...stop, lat: stop.lat, lng: stop.lng })
+      }
     }
     return out
-  }, [trip?.itinerary, places])
+  }, [trip?.itinerary])
 
   if (!trip) {
     return (

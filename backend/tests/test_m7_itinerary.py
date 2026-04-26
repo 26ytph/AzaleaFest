@@ -105,62 +105,157 @@ def lookup(sample_places):
     return {p["place_id"]: p for p in sample_places}
 
 
-def test_normalize_stops_drops_unknown_place_id(lookup):
+async def test_normalize_stops_drops_unknown_place_id(lookup):
     raw = [
         {"time": "09:00", "place_id": 1, "name": "永康牛肉麵",
          "duration_min": 60, "transport_to_next": "步行 5 分鐘", "note": "招牌"},
         {"time": "11:00", "place_id": 999, "name": "鬼地方",
          "duration_min": 30, "transport_to_next": "", "note": ""},
     ]
-    stops = gen._normalize_stops(raw, lookup)
+    stops = await gen._normalize_stops(raw, lookup, allow_google_fallback=False)
     assert len(stops) == 1
     assert stops[0]["place_id"] == 1
 
 
-def test_normalize_stops_fills_missing_fields_from_lookup(lookup):
+async def test_normalize_stops_fills_missing_fields_from_lookup(lookup):
     raw = [{"time": "09:00", "place_id": 2, "duration_min": 45}]
-    stops = gen._normalize_stops(raw, lookup)
-    assert stops[0]["name"] == "象山步道"  # filled from lookup
+    stops = await gen._normalize_stops(raw, lookup, allow_google_fallback=False)
+    assert stops[0]["name"] == "象山步道"  # canonical from lookup
     assert stops[0]["transport_to_next"] == ""
     assert stops[0]["note"] == ""
     assert stops[0]["duration_min"] == 45
+    # 新欄位：lat/lng/address/google_place_id 必須帶出
+    assert stops[0]["lat"] == 25.0274
+    assert stops[0]["lng"] == 121.5707
+    assert stops[0]["google_place_id"] is None
 
 
-def test_normalize_stops_clamps_negative_duration(lookup):
+async def test_normalize_stops_overrides_gemini_name_with_canonical(lookup):
+    """pid 命中 → 用 DB canonical name，不信 Gemini 給的名字（防幻覺名）。"""
+    raw = [{"time": "09:00", "place_id": 1, "name": "完全錯的店名", "duration_min": 60}]
+    stops = await gen._normalize_stops(raw, lookup, allow_google_fallback=False)
+    assert stops[0]["name"] == "永康牛肉麵"
+
+
+async def test_normalize_stops_clamps_negative_duration(lookup):
     raw = [{"time": "09:00", "place_id": 1, "duration_min": -10}]
-    stops = gen._normalize_stops(raw, lookup)
+    stops = await gen._normalize_stops(raw, lookup, allow_google_fallback=False)
     assert stops[0]["duration_min"] == 0
 
 
-def test_normalize_stops_handles_string_place_id(lookup):
+async def test_normalize_stops_handles_string_place_id(lookup):
     raw = [{"time": "09:00", "place_id": "1", "duration_min": 30}]
-    stops = gen._normalize_stops(raw, lookup)
+    stops = await gen._normalize_stops(raw, lookup, allow_google_fallback=False)
     assert stops[0]["place_id"] == 1
 
 
-def test_normalize_stops_skips_non_dict_and_unparseable_id(lookup):
+async def test_normalize_stops_skips_non_dict_and_unparseable_id(lookup):
     raw = ["junk", None, {"place_id": "abc"}, {"place_id": None}]
-    assert gen._normalize_stops(raw, lookup) == []
+    assert await gen._normalize_stops(raw, lookup, allow_google_fallback=False) == []
 
 
-def test_normalize_stops_empty_input(lookup):
-    assert gen._normalize_stops([], lookup) == []
-    assert gen._normalize_stops(None, lookup) == []
+async def test_normalize_stops_empty_input(lookup):
+    assert await gen._normalize_stops([], lookup, allow_google_fallback=False) == []
+    assert await gen._normalize_stops(None, lookup, allow_google_fallback=False) == []
 
 
-def test_normalize_stops_truncates_long_note(lookup):
+async def test_normalize_stops_truncates_long_note(lookup):
     raw = [{"time": "09:00", "place_id": 1, "duration_min": 30, "note": "x" * 200}]
-    stops = gen._normalize_stops(raw, lookup)
+    stops = await gen._normalize_stops(raw, lookup, allow_google_fallback=False)
     assert len(stops[0]["note"]) <= 80
 
 
-def test_normalize_stops_preserves_order(lookup):
+async def test_normalize_stops_preserves_order(lookup):
     raw = [
         {"time": "11:00", "place_id": 2, "duration_min": 60},
         {"time": "09:00", "place_id": 1, "duration_min": 60},
     ]
-    stops = gen._normalize_stops(raw, lookup)
+    stops = await gen._normalize_stops(raw, lookup, allow_google_fallback=False)
     assert [s["place_id"] for s in stops] == [2, 1]
+
+
+# ---------------------------------------------------------------------------
+# _normalize_stops — Google Places fallback
+# ---------------------------------------------------------------------------
+
+class _FakeResolved:
+    """Lightweight stand-in for app.services.hotel.google_resolver.ResolvedPlace."""
+    def __init__(self, place_id, name, lat, lng, formatted_address, in_taipei=True):
+        self.place_id = place_id
+        self.name = name
+        self.lat = lat
+        self.lng = lng
+        self.formatted_address = formatted_address
+        self.in_taipei = in_taipei
+
+
+async def test_normalize_stops_google_fallback_hits(lookup, monkeypatch):
+    """pid 不在 candidate 但 name 真實存在 → Google 解析後加入行程。"""
+    monkeypatch.setattr(gen.settings, "GOOGLE_MAPS_API_KEY", "fake-key")
+
+    async def fake_resolve(name, *a, **kw):
+        return _FakeResolved(
+            place_id="ChIJtest", name="台北 101",
+            lat=25.0330, lng=121.5654,
+            formatted_address="台北市信義區信義路五段7號",
+        )
+    monkeypatch.setattr(gen, "resolve_place", fake_resolve)
+
+    raw = [{"time": "13:00", "place_id": 9999, "name": "台北 101", "duration_min": 60}]
+    stops = await gen._normalize_stops(raw, lookup)
+    assert len(stops) == 1
+    s = stops[0]
+    assert s["place_id"] == 0
+    assert s["google_place_id"] == "ChIJtest"
+    assert s["name"] == "台北 101"
+    assert s["lat"] == 25.0330
+    assert s["lng"] == 121.5654
+    assert s["address"] == "台北市信義區信義路五段7號"
+
+
+async def test_normalize_stops_google_fallback_miss_drops(lookup, monkeypatch):
+    monkeypatch.setattr(gen.settings, "GOOGLE_MAPS_API_KEY", "fake-key")
+
+    async def fake_resolve(name, *a, **kw):
+        return None
+    monkeypatch.setattr(gen, "resolve_place", fake_resolve)
+
+    raw = [{"time": "13:00", "place_id": 9999, "name": "完全不存在的店", "duration_min": 60}]
+    stops = await gen._normalize_stops(raw, lookup)
+    assert stops == []
+
+
+async def test_normalize_stops_drops_out_of_taipei_when_candidates_taipei_only(lookup, monkeypatch):
+    """所有 candidate 都在台北、Google 解到外縣市 → 視為跑題，drop。"""
+    monkeypatch.setattr(gen.settings, "GOOGLE_MAPS_API_KEY", "fake-key")
+
+    async def fake_resolve(name, *a, **kw):
+        return _FakeResolved(
+            place_id="ChIJkaohsiung", name="高雄某地",
+            lat=22.6, lng=120.3,
+            formatted_address="高雄市", in_taipei=False,
+        )
+    monkeypatch.setattr(gen, "resolve_place", fake_resolve)
+
+    raw = [{"time": "13:00", "place_id": 9999, "name": "高雄夢時代", "duration_min": 60}]
+    stops = await gen._normalize_stops(raw, lookup)
+    assert stops == []
+
+
+async def test_normalize_stops_no_google_fallback_when_key_missing(lookup, monkeypatch):
+    """GOOGLE_MAPS_API_KEY 未設 → 不嘗試 Google，直接 drop（避免無謂 API 呼叫）。"""
+    monkeypatch.setattr(gen.settings, "GOOGLE_MAPS_API_KEY", "")
+
+    called = []
+    async def fake_resolve(name, *a, **kw):
+        called.append(name)
+        return None
+    monkeypatch.setattr(gen, "resolve_place", fake_resolve)
+
+    raw = [{"time": "13:00", "place_id": 9999, "name": "X", "duration_min": 60}]
+    stops = await gen._normalize_stops(raw, lookup)
+    assert stops == []
+    assert called == []  # 完全不該呼叫
 
 
 # ---------------------------------------------------------------------------
@@ -455,17 +550,17 @@ async def test_generate_caps_candidates_to_max(monkeypatch):
 
     await gen.generate("s", "2026-05-01")
     assert len(captured["candidates"]) == gen._MAX_TOTAL_PLACES
-    # prompt 只列出截斷後的 candidates
-    assert "id=10" not in captured["prompt"]
+    # prompt 重新映射為 1..N（_build_prompt_candidates）→ 截斷後最大 id 為 _MAX_TOTAL_PLACES
+    assert f"id={gen._MAX_TOTAL_PLACES + 1}" not in captured["prompt"]
 
 
 @pytest.mark.asyncio
 async def test_generate_recovers_when_gemini_returns_empty(monkeypatch):
-    """Gemini 回 {} 時 stops=[]，total_duration_hours=0，整體仍要寫入表並回 200。"""
+    """Gemini 回 {} 時走 _fallback_schedule，產生確定性 stops 並寫入表回 200。"""
     async def fake_read_places(session_id):
         return [
             {"place_id": 1, "name": "X", "category": "food",
-             "lat": 25.0, "lng": 121.5, "source": "place"},
+             "lat": 25.0, "lng": 121.5, "address": "台北市某街 1 號", "source": "place"},
         ]
 
     async def fake_recs(session_id):
@@ -487,7 +582,14 @@ async def test_generate_recovers_when_gemini_returns_empty(monkeypatch):
     monkeypatch.setattr(gen, "_persist_itinerary", fake_persist)
 
     out = await gen.generate("s", "2026-05-01")
-    assert out == {"id": 99, "stops": [], "total_duration_hours": 0.0}
+    assert out["id"] == 99
+    # fallback 排程：1 個 candidate → 1 個 stop，並帶出座標 / 地址
+    assert len(out["stops"]) == 1
+    assert out["stops"][0]["place_id"] == 1
+    assert out["stops"][0]["lat"] == 25.0
+    assert out["stops"][0]["lng"] == 121.5
+    assert out["stops"][0]["address"] == "台北市某街 1 號"
+    assert out["total_duration_hours"] > 0
 
 
 # ---------------------------------------------------------------------------
@@ -504,6 +606,7 @@ def test_router_response_model_matches_frontend_types():
     assert set(ItineraryStopOut.model_fields) == {
         "time", "place_id", "name", "duration_min",
         "transport_to_next", "note",
+        "lat", "lng", "address", "google_place_id",
     }
 
 

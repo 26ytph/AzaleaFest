@@ -19,7 +19,11 @@ class ItineraryGenerateRequest(BaseModel):
 
 
 class ItineraryStopOut(BaseModel):
-    """對齊 frontend/src/lib/types.ts ItineraryStop（spec M0.5）。"""
+    """對齊 frontend/src/lib/types.ts ItineraryStop（spec M0.5）。
+
+    `place_id=0` 為哨兵值：來源是 Google Places fallback、無對應的 DB row
+    （此時 `google_place_id` 會帶 Google 的 opaque id）。
+    """
 
     time: str
     place_id: int
@@ -27,6 +31,10 @@ class ItineraryStopOut(BaseModel):
     duration_min: int
     transport_to_next: str
     note: str
+    lat: float
+    lng: float
+    address: str | None = None
+    google_place_id: str | None = None
 
 
 class ItineraryOut(BaseModel):

@@ -28,6 +28,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models.itinerary import Itinerary
 from app.models.place import Place
+from app.services.hotel.google_resolver import resolve_place
 from app.services.rag.recommender import find_similar
 
 log = logging.getLogger(__name__)
@@ -102,6 +103,11 @@ def _build_user_prompt(
     return (
         f"請為使用者規劃 {date} 的台北一日行程，從 {start_time} 開始。\n"
         f"{weather_line}\n\n"
+        "嚴格規則（違反會導致行程被丟棄）：\n"
+        "- place_id 只能從下方清單挑選；嚴禁自創新 id 或新地點。\n"
+        "- 每個 stop 的 name 必須與清單中該 id 的 name 完全一致。\n"
+        "- 若清單地點不足以排 5 站以上，請重複利用清單地點，不要編造新地點。\n"
+        "- 產出前自我檢查：每個 stop.place_id 都在下方清單中嗎？若否，整段重排。\n\n"
         f"可用地點清單（請從這些挑 5–8 個排成一條合理動線；可重新排序、不必全選）：\n"
         f"{place_lines}\n\n"
         "交通時間估算規則（請參考兩點間直線距離）：\n"
@@ -130,39 +136,125 @@ def _build_user_prompt(
     )
 
 
-def _normalize_stops(
-    raw_stops: list[Any], place_lookup: dict[int, dict]
-) -> list[dict]:
-    """把 Gemini 回的 stops 轉成嚴格符合 ItineraryStop 的 dict.
+_TAIPEI_BBOX_LAT = (24.95, 25.21)
+_TAIPEI_BBOX_LNG = (121.45, 121.67)
 
-    過濾掉 LLM 幻想出來、不在 place_lookup 裡的 place_id；缺欄位的補預設值。
-    回傳保留 LLM 原本的順序。
+
+def _all_candidates_in_taipei(place_lookup: dict[int, dict]) -> bool:
+    """所有 candidate 都在台北 bbox 時，外縣市的 Google fallback 應視為跑題。"""
+    if not place_lookup:
+        return False
+    for ref in place_lookup.values():
+        lat = ref.get("lat")
+        lng = ref.get("lng")
+        if lat is None or lng is None:
+            return False
+        if not (_TAIPEI_BBOX_LAT[0] <= float(lat) <= _TAIPEI_BBOX_LAT[1]):
+            return False
+        if not (_TAIPEI_BBOX_LNG[0] <= float(lng) <= _TAIPEI_BBOX_LNG[1]):
+            return False
+    return True
+
+
+def _stop_from_candidate(
+    raw: dict, ref: dict, default_duration: int = 60
+) -> dict:
+    """命中 candidate：用 DB 的 canonical name/座標/地址，覆寫 Gemini 的 name。"""
+    try:
+        duration = int(raw.get("duration_min", default_duration))
+    except (TypeError, ValueError):
+        duration = default_duration
+    return {
+        "time": str(raw.get("time", "")).strip(),
+        "place_id": int(ref["place_id"]),
+        "name": str(ref["name"]),
+        "duration_min": max(0, duration),
+        "transport_to_next": str(raw.get("transport_to_next") or ""),
+        "note": str(raw.get("note") or "")[:80],
+        "lat": float(ref["lat"]),
+        "lng": float(ref["lng"]),
+        "address": ref.get("address"),
+        "google_place_id": None,
+    }
+
+
+def _stop_from_resolved(raw: dict, resolved: Any) -> dict:
+    """Google Places 解析成功：以 Google 結果作為地點來源。place_id=0 為哨兵值。"""
+    try:
+        duration = int(raw.get("duration_min", 60))
+    except (TypeError, ValueError):
+        duration = 60
+    return {
+        "time": str(raw.get("time", "")).strip(),
+        "place_id": 0,
+        "name": str(resolved.name),
+        "duration_min": max(0, duration),
+        "transport_to_next": str(raw.get("transport_to_next") or ""),
+        "note": str(raw.get("note") or "")[:80],
+        "lat": float(resolved.lat),
+        "lng": float(resolved.lng),
+        "address": resolved.formatted_address or None,
+        "google_place_id": resolved.place_id,
+    }
+
+
+async def _normalize_stops(
+    raw_stops: list[Any],
+    place_lookup: dict[int, dict],
+    *,
+    allow_google_fallback: bool = True,
+) -> list[dict]:
+    """把 Gemini 回的 stops 轉成嚴格符合 ItineraryStop 的 dict（含 lat/lng/address）。
+
+    Resolution 三層：
+      1. place_id 在 candidate → 用 DB canonical（覆寫 Gemini 的 name），保證真實。
+      2. place_id 不在 candidate 但 name 非空 → 呼叫 Google Places 驗證；命中 → 採用。
+      3. 否則 drop（log warning，方便日後 grep 幻覺率）。
     """
     normalized: list[dict] = []
+    taipei_only = _all_candidates_in_taipei(place_lookup)
     for raw in raw_stops or []:
         if not isinstance(raw, dict):
             continue
         try:
             pid = int(raw.get("place_id"))
         except (TypeError, ValueError):
+            pid = None
+
+        if pid is not None and pid in place_lookup:
+            normalized.append(_stop_from_candidate(raw, place_lookup[pid]))
             continue
-        if pid not in place_lookup:
+
+        name = str(raw.get("name") or "").strip()
+        if not name or not allow_google_fallback or not settings.GOOGLE_MAPS_API_KEY:
+            log.warning(
+                "dropped hallucinated stop name=%r pid=%r", raw.get("name"), raw.get("place_id")
+            )
             continue
-        ref = place_lookup[pid]
+
         try:
-            duration = int(raw.get("duration_min", 60))
-        except (TypeError, ValueError):
-            duration = 60
-        normalized.append(
-            {
-                "time": str(raw.get("time", "")).strip(),
-                "place_id": pid,
-                "name": str(raw.get("name") or ref["name"]),
-                "duration_min": max(0, duration),
-                "transport_to_next": str(raw.get("transport_to_next") or ""),
-                "note": str(raw.get("note") or "")[:80],
-            }
-        )
+            resolved = await resolve_place(name)
+        except Exception:
+            log.exception("resolve_place failed for name=%r", name)
+            resolved = None
+
+        if resolved is None:
+            log.warning(
+                "dropped hallucinated stop name=%r pid=%r (google miss)",
+                raw.get("name"),
+                raw.get("place_id"),
+            )
+            continue
+
+        if taipei_only and not resolved.in_taipei:
+            log.warning(
+                "dropped out-of-taipei google resolution name=%r → %r",
+                name,
+                resolved.formatted_address,
+            )
+            continue
+
+        normalized.append(_stop_from_resolved(raw, resolved))
     return normalized
 
 
@@ -204,6 +296,10 @@ def _fallback_schedule(places: list[dict], start_time: str) -> dict:
             "duration_min": duration,
             "transport_to_next": transport,
             "note": "",
+            "lat": float(p["lat"]),
+            "lng": float(p["lng"]),
+            "address": p.get("address"),
+            "google_place_id": None,
         })
         current_min += duration + (0 if is_last else _TRANSPORT_BETWEEN_MIN)
 
@@ -231,7 +327,7 @@ async def _load_session_places(
 ) -> list[dict]:
     rows = await session.execute(
         select(
-            Place.id, Place.name, Place.category, Place.lat, Place.lng,
+            Place.id, Place.name, Place.category, Place.lat, Place.lng, Place.address,
         )
         .where(Place.user_session_id == session_id)
         .order_by(Place.created_at.desc())
@@ -243,6 +339,7 @@ async def _load_session_places(
             "category": r[2],
             "lat": float(r[3]),
             "lng": float(r[4]),
+            "address": r[5],
             "source": "place",
         }
         for r in rows.all()
@@ -267,6 +364,7 @@ async def _gather_recommendations(session_id: str) -> list[dict]:
                     "category": a["category"],
                     "lat": float(a["lat"]),
                     "lng": float(a["lng"]),
+                    "address": a.get("address"),
                     "source": "recommendation",
                 }
             )
@@ -336,7 +434,7 @@ async def _generate_schedule(prompt: str) -> dict:
                     "你是台北旅遊規劃師。只回傳 JSON，不要任何說明文字或 markdown。"
                 ),
                 response_mime_type="application/json",
-                temperature=0.5,
+                temperature=0.2,
             ),
         )
         text = (resp.text or "").strip()
@@ -412,7 +510,7 @@ async def generate(
     else:
         raw = {}
 
-    stops = _normalize_stops(raw.get("stops", []), place_lookup)
+    stops = await _normalize_stops(raw.get("stops", []), place_lookup)
     if not stops and candidates:
         fallback = _fallback_schedule(candidates, start_time)
         stops = fallback["stops"]

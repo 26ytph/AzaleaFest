@@ -190,3 +190,6 @@ async def resolve_hotel(
         return await _do(client)
     async with httpx.AsyncClient() as c:
         return await _do(c)
+
+
+resolve_place = resolve_hotel

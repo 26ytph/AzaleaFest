@@ -131,6 +131,9 @@ export const mockItinerary: Itinerary = {
       duration_min: 60,
       transport_to_next: 'MRT 約 15 分鐘',
       note: '早晨河岸散步，避開正午高溫',
+      lat: 25.0566,
+      lng: 121.5085,
+      address: '台北市大同區環河北路一段',
     },
     {
       time: '11:00',
@@ -139,6 +142,9 @@ export const mockItinerary: Itinerary = {
       duration_min: 75,
       transport_to_next: '步行 8 分鐘',
       note: '搭配台灣茶與午前點心',
+      lat: 25.0570,
+      lng: 121.5095,
+      address: '台北市大同區迪化街一段',
     },
     {
       time: '12:30',
@@ -147,6 +153,9 @@ export const mockItinerary: Itinerary = {
       duration_min: 60,
       transport_to_next: 'MRT 約 12 分鐘',
       note: '經典午餐，建議避開 13:00 高峰',
+      lat: 25.0329,
+      lng: 121.5299,
+      address: '台北市大安區永康街31號',
     },
     {
       time: '14:00',
@@ -155,6 +164,9 @@ export const mockItinerary: Itinerary = {
       duration_min: 90,
       transport_to_next: '計程車 10 分鐘',
       note: '下午手沖時段',
+      lat: 25.0559,
+      lng: 121.5541,
+      address: '台北市松山區富錦街',
     },
     {
       time: '16:00',
@@ -163,6 +175,9 @@ export const mockItinerary: Itinerary = {
       duration_min: 90,
       transport_to_next: '步行 5 分鐘',
       note: '眺望 101，黃昏拍照',
+      lat: 25.0327,
+      lng: 121.5614,
+      address: '台北市信義區松勤街50號',
     },
     {
       time: '18:00',
@@ -171,6 +186,9 @@ export const mockItinerary: Itinerary = {
       duration_min: 0,
       transport_to_next: '入住',
       note: '今日入住點',
+      lat: 25.0330,
+      lng: 121.5654,
+      address: '台北市信義區松壽路2號',
     },
   ],
 }

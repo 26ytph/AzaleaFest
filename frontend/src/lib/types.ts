@@ -65,6 +65,10 @@ export interface ItineraryStop {
   duration_min: number
   transport_to_next: string
   note: string
+  lat: number
+  lng: number
+  address?: string | null
+  google_place_id?: string | null
 }
 
 export interface Itinerary {
