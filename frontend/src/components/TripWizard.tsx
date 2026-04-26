@@ -517,7 +517,8 @@ export default function TripWizard({
             <button
               type="button"
               onClick={() => setStep((s) => s + 1)}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500"
+              disabled={step === 0 && title.trim().length === 0}
+              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {t('common.next')}
             </button>
