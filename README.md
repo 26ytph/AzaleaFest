@@ -15,15 +15,21 @@
 
 ## Demo 影片
 
-<video src="docs/videos/batchsend.mp4" controls width="600"></video>
+1. 傳好多影片
+https://github.com/user-attachments/assets/2df6fcd6-faaa-46d5-b3de-0bda2a3a0381
 
-<video src="docs/videos/longscrol.mp4" controls width="600"></video>
+2. 累積導致忘記
+https://github.com/user-attachments/assets/f00bc798-31e9-474c-a46b-8bab033d5f8b
 
-<video src="docs/videos/addspot.mp4" controls width="600"></video>
+3. 新增景點
+https://github.com/user-attachments/assets/891f1efe-df89-4fdf-9dd7-76a468b51ebd
 
-<video src="docs/videos/verification.mp4" controls width="600"></video>
+4. 住宿檢驗
+https://github.com/user-attachments/assets/b050c117-30bd-491d-8dc6-a4b92cf77913
 
-<video src="docs/videos/gensch.mp4" controls width="600"></video>
+5. 生成行程
+https://github.com/user-attachments/assets/037b67af-233b-4218-881a-9335410c4aca
+
 
 
 ## 系統架構
