@@ -69,6 +69,20 @@ def _format_place_line(p: dict) -> str:
     )
 
 
+def _build_prompt_candidates(candidates: list[dict]) -> tuple[list[dict], dict[int, int]]:
+    """把 candidates 轉成 prompt 用的版本（id 都換成正整數），並回傳 prompt_id → place_id 對照表。
+
+    Gemini 容易把負數 id 搞錯，所以傳給 prompt 的全用 1-based 正整數，
+    normalize 時再透過 id_map 換回原始 place_id。
+    """
+    prompt_list: list[dict] = []
+    id_map: dict[int, int] = {}
+    for i, p in enumerate(candidates, start=1):
+        id_map[i] = p["place_id"]
+        prompt_list.append({**p, "place_id": i})
+    return prompt_list, id_map
+
+
 def _build_user_prompt(
     date: str,
     start_time: str,
@@ -150,6 +164,51 @@ def _normalize_stops(
             }
         )
     return normalized
+
+
+_DURATION_BY_CATEGORY: dict[str, int] = {
+    "attraction": 90,
+    "food": 60,
+    "hotel": 30,
+}
+_TRANSPORT_BETWEEN_MIN = 15
+
+
+def _fallback_schedule(places: list[dict], start_time: str) -> dict:
+    """Gemini 不可用時的確定性排程：依清單順序分配時間。"""
+    try:
+        h, m = map(int, start_time.split(":"))
+    except (ValueError, AttributeError):
+        h, m = 9, 0
+    current_min = h * 60 + m
+
+    stops = []
+    for i, p in enumerate(places):
+        t_h, t_m = divmod(current_min, 60)
+        duration = _DURATION_BY_CATEGORY.get(p.get("category", ""), 60)
+        is_last = i == len(places) - 1
+        next_p = places[i + 1] if not is_last else None
+        transport = ""
+        if next_p:
+            dist = _haversine_km(p["lat"], p["lng"], next_p["lat"], next_p["lng"])
+            if dist < 0.5:
+                transport = "步行 5 分鐘"
+            elif dist < 2:
+                transport = f"步行約 {int(dist * 10)} 分鐘"
+            else:
+                transport = f"MRT / 計程車約 {int(dist * 3)} 分鐘"
+        stops.append({
+            "time": f"{t_h:02d}:{t_m:02d}",
+            "place_id": p["place_id"],
+            "name": p["name"],
+            "duration_min": duration,
+            "transport_to_next": transport,
+            "note": "",
+        })
+        current_min += duration + (0 if is_last else _TRANSPORT_BETWEEN_MIN)
+
+    total = sum(s["duration_min"] for s in stops) / 60.0
+    return {"stops": stops, "total_duration_hours": round(total, 2)}
 
 
 def _total_duration_hours(stops: list[dict], raw_total: Any = None) -> float:
@@ -264,13 +323,13 @@ def _get_gemini_client() -> Any:
 
 
 async def _generate_schedule(prompt: str) -> dict:
-    """呼叫 Gemini 2.5 pro，期望回 JSON object。失敗 → 空 schedule。"""
+    """呼叫 Gemini，期望回 JSON object。失敗 → 空 schedule。"""
     try:
         from google.genai import types
 
         client = _get_gemini_client()
         resp = await client.aio.models.generate_content(
-            model="gemini-2.5-pro",
+            model="gemini-2.5-flash-lite",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=(
@@ -337,12 +396,27 @@ async def generate(
     weather = await _fetch_weather()
 
     if candidates:
-        prompt = _build_user_prompt(date, start_time, weather, candidates)
+        prompt_candidates, id_map = _build_prompt_candidates(candidates)
+        prompt_place_lookup = {p["place_id"]: p for p in prompt_candidates}
+        prompt = _build_user_prompt(date, start_time, weather, prompt_candidates)
         raw = await _generate_schedule(prompt)
+        # 把 Gemini 回傳的 prompt_id 翻譯回真實 place_id
+        for stop in raw.get("stops", []):
+            if isinstance(stop, dict):
+                try:
+                    pid = int(stop["place_id"])
+                    if pid in id_map:
+                        stop["place_id"] = id_map[pid]
+                except (KeyError, TypeError, ValueError):
+                    pass
     else:
         raw = {}
 
     stops = _normalize_stops(raw.get("stops", []), place_lookup)
+    if not stops and candidates:
+        fallback = _fallback_schedule(candidates, start_time)
+        stops = fallback["stops"]
+        raw = fallback
     total_hours = _total_duration_hours(stops, raw.get("total_duration_hours"))
 
     itinerary_id = await _persist_itinerary(

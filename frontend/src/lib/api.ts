@@ -40,18 +40,36 @@ export function getSessionId(): string {
   return id
 }
 
+function buildUrl(path: string, query?: Record<string, string | number | undefined>): string {
+  let fullPath: string
+  if (BASE_URL.startsWith('http')) {
+    const url = new URL(path, BASE_URL)
+    if (query) {
+      for (const [k, v] of Object.entries(query)) {
+        if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
+      }
+    }
+    return url.toString()
+  } else {
+    fullPath = BASE_URL + path
+    if (query) {
+      const params = new URLSearchParams()
+      for (const [k, v] of Object.entries(query)) {
+        if (v !== undefined && v !== null) params.set(k, String(v))
+      }
+      const qs = params.toString()
+      if (qs) fullPath += '?' + qs
+    }
+    return fullPath
+  }
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit & { query?: Record<string, string | number | undefined> },
 ): Promise<T> {
   const { query, ...rest } = init ?? {}
-  const url = new URL(path, BASE_URL)
-  if (query) {
-    for (const [k, v] of Object.entries(query)) {
-      if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
-    }
-  }
-  const res = await fetch(url.toString(), {
+  const res = await fetch(buildUrl(path, query), {
     ...rest,
     headers: {
       'Content-Type': 'application/json',
