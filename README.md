@@ -1,3 +1,10 @@
+> 🏅 **2026 YTP 黑客松 — 青年組 第 5 名 佳作**
+>
+> 作品：**AzaleaFest — Taipei WanderGuard**
+> 主辦方公開展示版 ｜ 完整得獎名單見 [26ytph organization](https://github.com/orgs/26ytph/repositories)
+
+---
+
 # 台北到不到--一鍵儲存下次一定
 
 [簡報投影片 (PDF)](docs/slides.pdf)
